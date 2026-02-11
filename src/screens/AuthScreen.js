@@ -7,24 +7,51 @@ import {
     TouchableOpacity,
     ScrollView,
     StatusBar,
-    Image,
+    Alert,
+    ActivityIndicator,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, FontAwesome } from '@expo/vector-icons';
+import { useAuth } from '../context/AuthContext';
 
 export default function AuthScreen({ navigation }) {
+    const { register, login } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [username, setUsername] = useState('');
     const [agreePrivacy, setAgreePrivacy] = useState(false);
     const [agreeLocation, setAgreeLocation] = useState(false);
     const [selectedTeamAction, setSelectedTeamAction] = useState(null);
+    const [isLogin, setIsLogin] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
+    const [errorMsg, setErrorMsg] = useState('');
 
-    const handleSignUp = () => {
-        navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
-    };
+    const handleSubmit = async () => {
+        setErrorMsg('');
+        if (!email.trim() || !password.trim()) {
+            setErrorMsg('Email and password are required');
+            return;
+        }
+        if (!isLogin && !username.trim()) {
+            setErrorMsg('Username is required');
+            return;
+        }
 
-    const handleSkip = () => {
-        navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
+        setSubmitting(true);
+        try {
+            if (isLogin) {
+                await login(email.trim(), password);
+            } else {
+                await register(email.trim(), password, username.trim(), {
+                    agreePrivacy,
+                    agreeLocation,
+                });
+            }
+        } catch (err) {
+            const msg = err.response?.data?.error || err.message || 'Something went wrong';
+            setErrorMsg(msg);
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     return (
@@ -43,28 +70,29 @@ export default function AuthScreen({ navigation }) {
                     Unleash your inner explorer. Track,{'\n'}claim, and dominate territories{'\n'}worldwide.
                 </Text>
 
-                {/* Social Login Buttons */}
-                <TouchableOpacity style={[styles.socialBtn, { backgroundColor: '#5B63D3' }]} activeOpacity={0.85}>
-                    <FontAwesome name="google" size={18} color="#fff" />
-                    <Text style={styles.socialBtnText}>Continue with Google</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={[styles.socialBtn, { backgroundColor: '#2a2d3e', borderWidth: 1, borderColor: '#3a3d50' }]} activeOpacity={0.85}>
-                    <Ionicons name="logo-apple" size={20} color="#fff" />
-                    <Text style={styles.socialBtnText}>Continue with Apple</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={[styles.socialBtn, { backgroundColor: '#5B63D3' }]} activeOpacity={0.85}>
-                    <FontAwesome name="facebook" size={20} color="#fff" />
-                    <Text style={styles.socialBtnText}>Continue with Facebook</Text>
-                </TouchableOpacity>
-
-                {/* OR Divider */}
-                <View style={styles.dividerRow}>
-                    <View style={styles.dividerLine} />
-                    <Text style={styles.dividerText}>OR</Text>
-                    <View style={styles.dividerLine} />
+                {/* Toggle Login/Register */}
+                <View style={styles.toggleRow}>
+                    <TouchableOpacity
+                        style={[styles.toggleBtn, !isLogin && styles.toggleBtnActive]}
+                        onPress={() => { setIsLogin(false); setErrorMsg(''); }}
+                    >
+                        <Text style={[styles.toggleBtnText, !isLogin && styles.toggleBtnTextActive]}>Sign Up</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.toggleBtn, isLogin && styles.toggleBtnActive]}
+                        onPress={() => { setIsLogin(true); setErrorMsg(''); }}
+                    >
+                        <Text style={[styles.toggleBtnText, isLogin && styles.toggleBtnTextActive]}>Log In</Text>
+                    </TouchableOpacity>
                 </View>
+
+                {/* Error Message */}
+                {errorMsg ? (
+                    <View style={styles.errorBox}>
+                        <Ionicons name="alert-circle" size={16} color="#E53935" />
+                        <Text style={styles.errorText}>{errorMsg}</Text>
+                    </View>
+                ) : null}
 
                 {/* Email Field */}
                 <Text style={styles.fieldLabel}>Email Address</Text>
@@ -95,299 +123,194 @@ export default function AuthScreen({ navigation }) {
                     />
                 </View>
 
-                {/* Username Field */}
-                <Text style={styles.fieldLabel}>Username</Text>
-                <View style={styles.inputContainer}>
-                    <Ionicons name="person-outline" size={18} color="#666" />
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Choose your adventurer name"
-                        placeholderTextColor="#555"
-                        value={username}
-                        onChangeText={setUsername}
-                        autoCapitalize="none"
-                    />
-                </View>
+                {/* Username Field (only for Sign Up) */}
+                {!isLogin && (
+                    <>
+                        <Text style={styles.fieldLabel}>Username</Text>
+                        <View style={styles.inputContainer}>
+                            <Ionicons name="person-outline" size={18} color="#666" />
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Choose your adventurer name"
+                                placeholderTextColor="#555"
+                                value={username}
+                                onChangeText={setUsername}
+                                autoCapitalize="none"
+                            />
+                        </View>
 
-                {/* Avatar */}
-                <Text style={styles.avatarLabel}>Choose Your Avatar</Text>
-                <View style={styles.avatarContainer}>
-                    <View style={styles.avatarCircle}>
-                        <Ionicons name="person" size={40} color="#7C83ED" />
-                    </View>
-                </View>
+                        {/* Avatar */}
+                        <Text style={styles.avatarLabel}>Choose Your Avatar</Text>
+                        <View style={styles.avatarContainer}>
+                            <View style={styles.avatarCircle}>
+                                <Ionicons name="person" size={40} color="#7C83ED" />
+                            </View>
+                        </View>
 
-                {/* Team Selection */}
-                <Text style={styles.teamLabel}>Team Selection</Text>
+                        {/* Team Selection */}
+                        <Text style={styles.teamLabel}>Team Selection</Text>
+                        <TouchableOpacity
+                            style={[styles.teamBtn, selectedTeamAction === 'join' && styles.teamBtnActive]}
+                            onPress={() => setSelectedTeamAction('join')}
+                            activeOpacity={0.85}
+                        >
+                            <Text style={[styles.teamBtnText, selectedTeamAction === 'join' && styles.teamBtnTextActive]}>
+                                Join an Existing Team
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.teamBtn, selectedTeamAction === 'create' && styles.teamBtnActive]}
+                            onPress={() => setSelectedTeamAction('create')}
+                            activeOpacity={0.85}
+                        >
+                            <Text style={[styles.teamBtnText, selectedTeamAction === 'create' && styles.teamBtnTextActive]}>
+                                Create a New Team
+                            </Text>
+                        </TouchableOpacity>
+                    </>
+                )}
+
+                {/* Submit Button */}
                 <TouchableOpacity
-                    style={[styles.teamBtn, selectedTeamAction === 'join' && styles.teamBtnActive]}
-                    onPress={() => setSelectedTeamAction('join')}
+                    style={[styles.signUpButton, submitting && { opacity: 0.7 }]}
+                    onPress={handleSubmit}
                     activeOpacity={0.85}
+                    disabled={submitting}
                 >
-                    <Text style={[styles.teamBtnText, selectedTeamAction === 'join' && styles.teamBtnTextActive]}>
-                        Join an Existing Team
-                    </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={[styles.teamBtn, selectedTeamAction === 'create' && styles.teamBtnActive]}
-                    onPress={() => setSelectedTeamAction('create')}
-                    activeOpacity={0.85}
-                >
-                    <Text style={[styles.teamBtnText, selectedTeamAction === 'create' && styles.teamBtnTextActive]}>
-                        Create a New Team
-                    </Text>
+                    {submitting ? (
+                        <ActivityIndicator color="#fff" />
+                    ) : (
+                        <Text style={styles.signUpButtonText}>
+                            {isLogin ? 'Log In' : 'Sign Up'}
+                        </Text>
+                    )}
                 </TouchableOpacity>
 
-                {/* Sign Up / Log In */}
-                <TouchableOpacity style={styles.signUpButton} onPress={handleSignUp} activeOpacity={0.85}>
-                    <Text style={styles.signUpButtonText}>Sign Up / Log In</Text>
-                </TouchableOpacity>
+                {!isLogin && (
+                    <>
+                        {/* Divider */}
+                        <View style={styles.sectionDivider} />
 
-                {/* Skip */}
-                <TouchableOpacity onPress={handleSkip} activeOpacity={0.7}>
-                    <Text style={styles.skipText}>Skip to Limited Demo</Text>
-                </TouchableOpacity>
+                        {/* Permissions */}
+                        <Text style={styles.permissionsTitle}>Permissions & Consent</Text>
 
-                {/* Divider */}
-                <View style={styles.sectionDivider} />
+                        <TouchableOpacity
+                            style={styles.checkboxRow}
+                            onPress={() => setAgreePrivacy(!agreePrivacy)}
+                            activeOpacity={0.7}
+                        >
+                            <View style={[styles.checkbox, agreePrivacy && styles.checkboxChecked]}>
+                                {agreePrivacy && <Ionicons name="checkmark" size={14} color="#fff" />}
+                            </View>
+                            <Text style={styles.checkboxText}>
+                                I agree to the GeoConquest Privacy Policy and Terms of Service. My data may be used to improve the game experience.
+                            </Text>
+                        </TouchableOpacity>
 
-                {/* Permissions */}
-                <Text style={styles.permissionsTitle}>Permissions & Consent</Text>
-
-                <TouchableOpacity
-                    style={styles.checkboxRow}
-                    onPress={() => setAgreePrivacy(!agreePrivacy)}
-                    activeOpacity={0.7}
-                >
-                    <View style={[styles.checkbox, agreePrivacy && styles.checkboxChecked]}>
-                        {agreePrivacy && <Ionicons name="checkmark" size={14} color="#fff" />}
-                    </View>
-                    <Text style={styles.checkboxText}>
-                        I agree to the GeoConquest Privacy Policy and Terms of Service. My data may be used to improve the game experience.
-                    </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={styles.checkboxRow}
-                    onPress={() => setAgreeLocation(!agreeLocation)}
-                    activeOpacity={0.7}
-                >
-                    <View style={[styles.checkbox, agreeLocation && styles.checkboxChecked]}>
-                        {agreeLocation && <Ionicons name="checkmark" size={14} color="#fff" />}
-                    </View>
-                    <Text style={styles.checkboxText}>
-                        I grant GeoConquest access to my device's precise location and motion data for core gameplay functionality and territory claiming.
-                    </Text>
-                </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.checkboxRow}
+                            onPress={() => setAgreeLocation(!agreeLocation)}
+                            activeOpacity={0.7}
+                        >
+                            <View style={[styles.checkbox, agreeLocation && styles.checkboxChecked]}>
+                                {agreeLocation && <Ionicons name="checkmark" size={14} color="#fff" />}
+                            </View>
+                            <Text style={styles.checkboxText}>
+                                I grant GeoConquest access to my device's precise location and motion data for core gameplay functionality and territory claiming.
+                            </Text>
+                        </TouchableOpacity>
+                    </>
+                )}
             </ScrollView>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#0a0e1a',
-    },
+    container: { flex: 1, backgroundColor: '#0a0e1a' },
     scrollContent: {
-        paddingTop: 60,
-        paddingBottom: 50,
-        paddingHorizontal: 24,
-        alignItems: 'center',
+        paddingTop: 60, paddingBottom: 50, paddingHorizontal: 24, alignItems: 'center',
     },
-    logoContainer: {
-        marginBottom: 20,
-    },
+    logoContainer: { marginBottom: 20 },
     logoBox: {
-        width: 64,
-        height: 64,
-        borderRadius: 16,
+        width: 64, height: 64, borderRadius: 16,
         backgroundColor: 'rgba(124, 131, 237, 0.15)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(124, 131, 237, 0.3)',
+        justifyContent: 'center', alignItems: 'center',
+        borderWidth: 1, borderColor: 'rgba(124, 131, 237, 0.3)',
     },
-    title: {
-        fontSize: 26,
-        fontWeight: '800',
-        color: '#fff',
-        textAlign: 'center',
-        marginBottom: 10,
+    title: { fontSize: 26, fontWeight: '800', color: '#fff', textAlign: 'center', marginBottom: 10 },
+    subtitle: { fontSize: 14, color: '#888daf', textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+    toggleRow: {
+        flexDirection: 'row', alignSelf: 'stretch', marginBottom: 20,
+        backgroundColor: '#1a1e2e', borderRadius: 12, padding: 4,
     },
-    subtitle: {
-        fontSize: 14,
-        color: '#888daf',
-        textAlign: 'center',
-        lineHeight: 20,
-        marginBottom: 24,
+    toggleBtn: {
+        flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center',
     },
-    socialBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: 12,
-        paddingVertical: 14,
-        marginBottom: 10,
-        alignSelf: 'stretch',
-        gap: 10,
+    toggleBtnActive: { backgroundColor: '#5B63D3' },
+    toggleBtnText: { color: '#888', fontSize: 15, fontWeight: '600' },
+    toggleBtnTextActive: { color: '#fff' },
+    errorBox: {
+        flexDirection: 'row', alignItems: 'center', gap: 8,
+        backgroundColor: 'rgba(229,57,53,0.12)', borderRadius: 10,
+        padding: 12, alignSelf: 'stretch', marginBottom: 14,
+        borderWidth: 1, borderColor: 'rgba(229,57,53,0.3)',
     },
-    socialBtnText: {
-        color: '#fff',
-        fontSize: 15,
-        fontWeight: '600',
-    },
-    dividerRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        alignSelf: 'stretch',
-        marginVertical: 16,
-    },
-    dividerLine: {
-        flex: 1,
-        height: 1,
-        backgroundColor: '#2a2d3e',
-    },
-    dividerText: {
-        color: '#666',
-        fontSize: 13,
-        marginHorizontal: 14,
-        fontWeight: '500',
-    },
+    errorText: { color: '#E53935', fontSize: 13, fontWeight: '500', flex: 1 },
     fieldLabel: {
-        color: '#ccc',
-        fontSize: 13,
-        fontWeight: '600',
-        alignSelf: 'flex-start',
-        marginBottom: 6,
-        marginTop: 4,
+        color: '#ccc', fontSize: 13, fontWeight: '600',
+        alignSelf: 'flex-start', marginBottom: 6, marginTop: 4,
     },
     inputContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#1a1e2e',
-        borderRadius: 12,
-        paddingHorizontal: 14,
-        paddingVertical: 13,
-        marginBottom: 12,
-        alignSelf: 'stretch',
-        gap: 10,
-        borderWidth: 1,
-        borderColor: '#2a2e40',
+        flexDirection: 'row', alignItems: 'center',
+        backgroundColor: '#1a1e2e', borderRadius: 12,
+        paddingHorizontal: 14, paddingVertical: 13,
+        marginBottom: 12, alignSelf: 'stretch', gap: 10,
+        borderWidth: 1, borderColor: '#2a2e40',
     },
-    input: {
-        flex: 1,
-        color: '#ccc',
-        fontSize: 14,
-    },
+    input: { flex: 1, color: '#ccc', fontSize: 14 },
     avatarLabel: {
-        color: '#ccc',
-        fontSize: 14,
-        fontWeight: '600',
-        textAlign: 'center',
-        marginTop: 10,
-        marginBottom: 10,
+        color: '#ccc', fontSize: 14, fontWeight: '600',
+        textAlign: 'center', marginTop: 10, marginBottom: 10,
     },
-    avatarContainer: {
-        alignItems: 'center',
-        marginBottom: 16,
-    },
+    avatarContainer: { alignItems: 'center', marginBottom: 16 },
     avatarCircle: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
+        width: 80, height: 80, borderRadius: 40,
         backgroundColor: 'rgba(124, 131, 237, 0.15)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 2,
-        borderColor: 'rgba(124, 131, 237, 0.4)',
+        justifyContent: 'center', alignItems: 'center',
+        borderWidth: 2, borderColor: 'rgba(124, 131, 237, 0.4)',
     },
-    teamLabel: {
-        color: '#ccc',
-        fontSize: 14,
-        fontWeight: '600',
-        textAlign: 'center',
-        marginBottom: 10,
-    },
+    teamLabel: { color: '#ccc', fontSize: 14, fontWeight: '600', textAlign: 'center', marginBottom: 10 },
     teamBtn: {
-        borderRadius: 12,
-        paddingVertical: 14,
-        alignSelf: 'stretch',
-        alignItems: 'center',
-        marginBottom: 10,
-        backgroundColor: '#1a1e2e',
-        borderWidth: 1,
-        borderColor: '#5B63D3',
+        borderRadius: 12, paddingVertical: 14, alignSelf: 'stretch',
+        alignItems: 'center', marginBottom: 10, backgroundColor: '#1a1e2e',
+        borderWidth: 1, borderColor: '#5B63D3',
     },
-    teamBtnActive: {
-        backgroundColor: '#5B63D3',
-    },
-    teamBtnText: {
-        color: '#ccc',
-        fontSize: 15,
-        fontWeight: '600',
-    },
-    teamBtnTextActive: {
-        color: '#fff',
-    },
+    teamBtnActive: { backgroundColor: '#5B63D3' },
+    teamBtnText: { color: '#ccc', fontSize: 15, fontWeight: '600' },
+    teamBtnTextActive: { color: '#fff' },
     signUpButton: {
-        backgroundColor: '#5B63D3',
-        borderRadius: 14,
-        paddingVertical: 16,
-        alignSelf: 'stretch',
-        alignItems: 'center',
-        marginTop: 14,
+        backgroundColor: '#5B63D3', borderRadius: 14, paddingVertical: 16,
+        alignSelf: 'stretch', alignItems: 'center', marginTop: 14,
     },
-    signUpButtonText: {
-        color: '#fff',
-        fontSize: 17,
-        fontWeight: '700',
-    },
-    skipText: {
-        color: '#7C83ED',
-        fontSize: 14,
-        fontWeight: '600',
-        marginTop: 14,
-        marginBottom: 6,
-    },
+    signUpButtonText: { color: '#fff', fontSize: 17, fontWeight: '700' },
     sectionDivider: {
-        height: 1,
-        backgroundColor: '#2a2d3e',
-        alignSelf: 'stretch',
-        marginVertical: 20,
+        height: 1, backgroundColor: '#2a2d3e',
+        alignSelf: 'stretch', marginVertical: 20,
     },
     permissionsTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#fff',
-        textAlign: 'center',
-        marginBottom: 16,
+        fontSize: 18, fontWeight: '700', color: '#fff',
+        textAlign: 'center', marginBottom: 16,
     },
     checkboxRow: {
-        flexDirection: 'row',
-        alignSelf: 'stretch',
-        marginBottom: 14,
-        gap: 12,
-        alignItems: 'flex-start',
+        flexDirection: 'row', alignSelf: 'stretch',
+        marginBottom: 14, gap: 12, alignItems: 'flex-start',
     },
     checkbox: {
-        width: 22,
-        height: 22,
-        borderRadius: 4,
-        borderWidth: 2,
-        borderColor: '#4a4e68',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginTop: 2,
+        width: 22, height: 22, borderRadius: 4,
+        borderWidth: 2, borderColor: '#4a4e68',
+        justifyContent: 'center', alignItems: 'center', marginTop: 2,
     },
-    checkboxChecked: {
-        backgroundColor: '#5B63D3',
-        borderColor: '#5B63D3',
-    },
-    checkboxText: {
-        flex: 1,
-        color: '#9094b8',
-        fontSize: 13,
-        lineHeight: 18,
-    },
+    checkboxChecked: { backgroundColor: '#5B63D3', borderColor: '#5B63D3' },
+    checkboxText: { flex: 1, color: '#9094b8', fontSize: 13, lineHeight: 18 },
 });

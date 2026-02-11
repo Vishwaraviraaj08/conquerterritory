@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     StyleSheet,
     View,
@@ -7,52 +7,69 @@ import {
     FlatList,
     Switch,
     StatusBar,
+    ActivityIndicator,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import api from '../api';
 
 const SCOPE_FILTERS = ['Local', 'State', 'Country', 'Global', 'Team'];
-
-const DUMMY_LEADERBOARD = [
-    { rank: 1, username: 'TerraKing', team: 'Alpha Wolves', area: '125.3k m²', streak: '45 days', color: '#FFD700' },
-    { rank: 2, username: 'RunnerX', team: 'Night Hawks', area: '98.7k m²', streak: '38 days', color: '#C0C0C0' },
-    { rank: 3, username: 'GeoMaster', team: 'Storm Riders', area: '87.2k m²', streak: '32 days', color: '#CD7F32' },
-    { rank: 4, username: 'PathFinder', team: 'Alpha Wolves', area: '76.5k m²', streak: '28 days', color: '#5B63D3' },
-    { rank: 5, username: 'TrailBlazer', team: 'Lone Wolves', area: '65.1k m²', streak: '25 days', color: '#5B63D3' },
-    { rank: 6, username: 'ConquestPro', team: 'Night Hawks', area: '58.9k m²', streak: '22 days', color: '#5B63D3' },
-    { rank: 7, username: 'ZoneRunner', team: 'Storm Riders', area: '52.4k m²', streak: '19 days', color: '#5B63D3' },
-    { rank: 8, username: 'MapWalker', team: 'Alpha Wolves', area: '48.8k m²', streak: '17 days', color: '#5B63D3' },
-    { rank: 9, username: 'TurfClaimer', team: 'Lone Wolves', area: '42.1k m²', streak: '15 days', color: '#5B63D3' },
-    { rank: 10, username: 'LandLord', team: 'Night Hawks', area: '38.6k m²', streak: '12 days', color: '#5B63D3' },
-];
+const SCOPE_MAP = { Local: 'local', State: 'state', Country: 'country', Global: 'global', Team: 'team' };
 
 const LeaderItem = ({ item }) => (
     <View style={styles.leaderCard}>
-        <View style={[styles.rankCircle, item.rank <= 3 && { borderColor: item.color, borderWidth: 2 }]}>
-            <Text style={[styles.rankText, item.rank <= 3 && { color: item.color }]}>{item.rank}</Text>
+        <View style={[styles.rankCircle, item.rank <= 3 && { borderColor: item.rank === 1 ? '#FFD700' : item.rank === 2 ? '#C0C0C0' : '#CD7F32', borderWidth: 2 }]}>
+            <Text style={[styles.rankText, item.rank <= 3 && { color: item.rank === 1 ? '#FFD700' : item.rank === 2 ? '#C0C0C0' : '#CD7F32' }]}>{item.rank}</Text>
         </View>
         <View style={styles.avatarSmall}>
             <Ionicons name="person" size={20} color="#7C83ED" />
         </View>
         <View style={styles.leaderInfo}>
             <Text style={styles.leaderName}>{item.username}</Text>
-            <Text style={styles.leaderTeam}>{item.team}</Text>
+            <Text style={styles.leaderTeam}>{item.totalCaptures || 0} captures</Text>
         </View>
         <View style={styles.leaderStats}>
             <View style={styles.leaderStatItem}>
-                <MaterialCommunityIcons name="vector-polygon" size={14} color="#5B63D3" />
-                <Text style={styles.leaderStatValue}>{item.area}</Text>
+                <MaterialCommunityIcons name="star" size={14} color="#E8A838" />
+                <Text style={styles.leaderStatValue}>{(item.totalPoints || 0).toLocaleString()} pts</Text>
             </View>
             <View style={styles.leaderStatItem}>
-                <MaterialCommunityIcons name="fire" size={14} color="#E8A838" />
-                <Text style={styles.leaderStatValue}>{item.streak}</Text>
+                <MaterialCommunityIcons name="vector-polygon" size={14} color="#5B63D3" />
+                <Text style={styles.leaderStatValue}>{((item.totalArea || 0) / 1000).toFixed(1)}k m²</Text>
             </View>
         </View>
     </View>
 );
 
 export default function LeaderboardsScreen() {
-    const [activeScope, setActiveScope] = useState('Local');
+    const [activeScope, setActiveScope] = useState('Global');
     const [friendsOnly, setFriendsOnly] = useState(false);
+    const [leaderboard, setLeaderboard] = useState([]);
+    const [userRank, setUserRank] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    const fetchLeaderboard = useCallback(async () => {
+        setLoading(true);
+        try {
+            const res = await api.get('/leaderboards', {
+                params: {
+                    scope: SCOPE_MAP[activeScope] || 'global',
+                    period: 'alltime',
+                    limit: 20,
+                },
+            });
+            setLeaderboard(res.data.leaderboard || []);
+            setUserRank(res.data.userRank);
+        } catch (e) {
+            console.log('Leaderboard fetch error:', e.message);
+            setLeaderboard([]);
+        } finally {
+            setLoading(false);
+        }
+    }, [activeScope]);
+
+    useEffect(() => {
+        fetchLeaderboard();
+    }, [fetchLeaderboard]);
 
     return (
         <View style={styles.container}>
@@ -60,7 +77,14 @@ export default function LeaderboardsScreen() {
             {/* Header */}
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Leaderboards</Text>
-                <Ionicons name="trophy-outline" size={22} color="#E8A838" />
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    {userRank && (
+                        <Text style={{ color: '#E8A838', fontWeight: '700', fontSize: 14 }}>
+                            #{userRank}
+                        </Text>
+                    )}
+                    <Ionicons name="trophy-outline" size={22} color="#E8A838" />
+                </View>
             </View>
 
             {/* Scope Filter Pills */}
@@ -83,7 +107,7 @@ export default function LeaderboardsScreen() {
             <View style={styles.controlsRow}>
                 <View style={styles.timeWindow}>
                     <Ionicons name="time-outline" size={16} color="#7C83ED" />
-                    <Text style={styles.timeWindowText}>This Week</Text>
+                    <Text style={styles.timeWindowText}>All Time</Text>
                     <Ionicons name="chevron-down" size={14} color="#888" />
                 </View>
                 <View style={styles.friendsToggle}>
@@ -110,13 +134,26 @@ export default function LeaderboardsScreen() {
             </View>
 
             {/* Leaderboard List */}
-            <FlatList
-                data={DUMMY_LEADERBOARD}
-                keyExtractor={(item) => item.rank.toString()}
-                renderItem={({ item }) => <LeaderItem item={item} />}
-                contentContainerStyle={styles.listContent}
-                showsVerticalScrollIndicator={false}
-            />
+            {loading ? (
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                    <ActivityIndicator size="large" color="#5B63D3" />
+                </View>
+            ) : leaderboard.length > 0 ? (
+                <FlatList
+                    data={leaderboard}
+                    keyExtractor={(item, index) => (item.userId || index).toString()}
+                    renderItem={({ item }) => <LeaderItem item={item} />}
+                    contentContainerStyle={styles.listContent}
+                    showsVerticalScrollIndicator={false}
+                />
+            ) : (
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                    <MaterialCommunityIcons name="trophy-outline" size={50} color="rgba(91,99,211,0.3)" />
+                    <Text style={{ color: '#666', marginTop: 12, fontSize: 14 }}>
+                        No leaderboard data yet. Start capturing!
+                    </Text>
+                </View>
+            )}
         </View>
     );
 }

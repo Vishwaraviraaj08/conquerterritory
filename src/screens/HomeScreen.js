@@ -13,6 +13,8 @@ import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { requestLocationPermissions } from '../utils/location';
+import { useAuth } from '../context/AuthContext';
+import api from '../api';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const TOMTOM_API_KEY = 'AoGGy9rY3zDH74BIUOIvpreylbkzKSAA';
@@ -30,6 +32,40 @@ const getMapHtml = () => `
         #map { width: 100%; height: 100%; }
         .mapboxgl-ctrl-logo { display: none !important; }
         .tt-logo { display: none !important; }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.6; }
+            50% { transform: scale(1.4); opacity: 0; }
+            100% { transform: scale(1); opacity: 0; }
+        }
+
+        .user-marker {
+            width: 44px; height: 44px; position: relative;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .marker-pulse {
+            position: absolute; width: 44px; height: 44px; border-radius: 50%;
+            background: rgba(91,99,211,0.25);
+            animation: pulse 2s ease-out infinite;
+        }
+        .marker-ring {
+            position: absolute; width: 28px; height: 28px; border-radius: 50%;
+            background: rgba(91,99,211,0.2);
+            border: 2.5px solid rgba(124,131,237,0.6);
+        }
+        .marker-dot {
+            position: absolute; width: 14px; height: 14px; border-radius: 50%;
+            background: linear-gradient(135deg, #7C83ED, #5B63D3);
+            border: 2.5px solid #fff;
+            box-shadow: 0 0 8px rgba(91,99,211,0.5);
+            z-index: 2;
+        }
+        .marker-heading {
+            position: absolute; top: -4px; width: 0; height: 0;
+            border-left: 5px solid transparent; border-right: 5px solid transparent;
+            border-bottom: 10px solid #5B63D3; z-index: 1;
+            transition: transform 0.3s ease;
+        }
     </style>
 </head>
 <body>
@@ -85,15 +121,12 @@ const getMapHtml = () => `
                     } catch(e) {}
 
                     var el = document.createElement('div');
-                    el.style.width = '32px';
-                    el.style.height = '32px';
-                    el.style.borderRadius = '50%';
-                    el.style.border = '3px solid #5B63D3';
-                    el.style.boxShadow = '0 0 14px rgba(91,99,211,0.5)';
-                    el.style.background = 'radial-gradient(circle, #7C83ED, #5B63D3)';
-                    el.innerHTML = '<div style="width:10px;height:10px;background:#2dd06e;border-radius:50%;position:absolute;bottom:-2px;right:-2px;border:2px solid #fff;"></div>';
-                    el.style.position = 'relative';
-                    userMarker = new tt.Marker({ element: el }).setLngLat([0, 0]).addTo(map);
+                    el.className = 'user-marker';
+                    el.innerHTML = '<div class="marker-pulse"></div>'
+                        + '<div class="marker-ring"></div>'
+                        + '<div class="marker-dot"></div>'
+                        + '<div class="marker-heading" id="heading-arrow"></div>';
+                    userMarker = new tt.Marker({ element: el, anchor: 'center' }).setLngLat([0, 0]).addTo(map);
 
                     window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'MAP_READY' }));
                 });
@@ -108,6 +141,13 @@ const getMapHtml = () => `
             currentLng = lng;
             var center = [lng, lat];
             userMarker.setLngLat(center);
+
+            var arrow = document.getElementById('heading-arrow');
+            if (arrow && heading !== null && heading !== undefined) {
+                arrow.style.transform = 'rotate(' + heading + 'deg)';
+                arrow.style.display = 'block';
+            }
+
             map.easeTo({
                 center: center,
                 bearing: is3D ? (heading || 0) : 0,
@@ -155,6 +195,7 @@ const getMapHtml = () => `
 `;
 
 export default function HomeScreen({ navigation }) {
+    const { user } = useAuth();
     const [location, setLocation] = useState(null);
     const [mapReady, setMapReady] = useState(false);
     const [publicSession, setPublicSession] = useState(true);
@@ -162,6 +203,22 @@ export default function HomeScreen({ navigation }) {
     const webViewRef = useRef(null);
     const locationRef = useRef(null);
     const watchRef = useRef(null);
+
+    const [stats, setStats] = useState({ steps: 0, streak: 0, energy: 75 });
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const res = await api.get('/users/profile');
+                const s = res.data.user?.stats || {};
+                setStats({
+                    steps: s.totalCaptures ? s.totalCaptures * 1200 : 0,
+                    streak: s.streak || 0,
+                    energy: s.healthScore || 75,
+                });
+            } catch (e) { }
+        })();
+    }, []);
 
     useEffect(() => {
         (async () => {
@@ -258,10 +315,18 @@ export default function HomeScreen({ navigation }) {
                     <MaterialCommunityIcons name="book-open-page-variant" size={22} color="#fff" />
                 </View>
                 <View style={{ flex: 1 }} />
-                <TouchableOpacity style={styles.headerIcon}>
+                <TouchableOpacity
+                    style={styles.headerIcon}
+                    onPress={() => navigation.navigate('Settings')}
+                    activeOpacity={0.7}
+                >
                     <Ionicons name="notifications-outline" size={22} color="#fff" />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.headerIcon}>
+                <TouchableOpacity
+                    style={styles.headerIcon}
+                    onPress={() => navigation.navigate('Settings')}
+                    activeOpacity={0.7}
+                >
                     <Ionicons name="settings-outline" size={22} color="#fff" />
                 </TouchableOpacity>
             </View>
@@ -271,20 +336,20 @@ export default function HomeScreen({ navigation }) {
                 <View style={styles.statRow}>
                     <MaterialCommunityIcons name="shoe-print" size={14} color="#7C83ED" />
                     <Text style={styles.statLabel}>Steps:</Text>
-                    <Text style={styles.statValue}>7890</Text>
+                    <Text style={styles.statValue}>{stats.steps.toLocaleString()}</Text>
                 </View>
                 <View style={styles.statRow}>
                     <MaterialCommunityIcons name="fire" size={14} color="#E88D3F" />
                     <Text style={styles.statLabel}>Streak:</Text>
-                    <Text style={styles.statValue}>12 days</Text>
+                    <Text style={styles.statValue}>{stats.streak} days</Text>
                 </View>
                 <View style={styles.statRow}>
                     <MaterialCommunityIcons name="lightning-bolt" size={14} color="#2dd06e" />
                     <Text style={styles.statLabel}>Energy:</Text>
-                    <Text style={styles.statValue}>75%</Text>
+                    <Text style={styles.statValue}>{stats.energy}%</Text>
                 </View>
                 <View style={styles.energyBarBg}>
-                    <View style={[styles.energyBarFill, { width: '75%' }]} />
+                    <View style={[styles.energyBarFill, { width: `${stats.energy}%` }]} />
                 </View>
             </View>
 
@@ -299,10 +364,16 @@ export default function HomeScreen({ navigation }) {
                 >
                     <MaterialCommunityIcons name="rotate-3d-variant" size={20} color={is3D ? '#5B63D3' : '#fff'} />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.mapCtrlBtn}>
+                <TouchableOpacity
+                    style={styles.mapCtrlBtn}
+                    onPress={() => navigation.navigate('Territories')}
+                >
                     <MaterialCommunityIcons name="sword-cross" size={20} color="#fff" />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.mapCtrlBtn}>
+                <TouchableOpacity
+                    style={styles.mapCtrlBtn}
+                    onPress={() => navigation.navigate('Profile')}
+                >
                     <Ionicons name="person-outline" size={20} color="#fff" />
                 </TouchableOpacity>
             </View>
@@ -327,9 +398,6 @@ export default function HomeScreen({ navigation }) {
                         <Text style={styles.startButtonText}>START</Text>
                         <MaterialCommunityIcons name="run-fast" size={20} color="#fff" />
                     </TouchableOpacity>
-                </View>
-                <View style={styles.teamFilterRow}>
-                    <Text style={styles.teamFilterLabel}>Team Filter</Text>
                 </View>
             </View>
         </View>
@@ -414,11 +482,4 @@ const styles = StyleSheet.create({
     startButtonText: {
         color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 1,
     },
-    teamFilterRow: {
-        flexDirection: 'row', alignItems: 'center',
-        backgroundColor: 'rgba(10, 14, 26, 0.85)',
-        borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10,
-        marginTop: 8, alignSelf: 'flex-start',
-    },
-    teamFilterLabel: { color: '#ccc', fontSize: 13, fontWeight: '500' },
 });

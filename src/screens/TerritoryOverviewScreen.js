@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     StyleSheet,
     View,
@@ -6,142 +6,131 @@ import {
     TouchableOpacity,
     FlatList,
     StatusBar,
+    ActivityIndicator,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import api from '../api';
 
-const DUMMY_TERRITORIES = [
-    {
-        id: '1',
-        name: 'Downtown Park Zone',
-        area: '5.2k m²',
-        defenseLevel: 'High',
-        contested: '2h ago',
-        owner: 'ConquestMaster',
-        durability: 85,
-        decayRate: '-2%/day',
-    },
-    {
-        id: '2',
-        name: 'Riverside Trail',
-        area: '3.8k m²',
-        defenseLevel: 'Medium',
-        contested: '5h ago',
-        owner: 'ConquestMaster',
-        durability: 65,
-        decayRate: '-3%/day',
-    },
-    {
-        id: '3',
-        name: 'University Campus',
-        area: '8.1k m²',
-        defenseLevel: 'High',
-        contested: '1d ago',
-        owner: 'ConquestMaster',
-        durability: 92,
-        decayRate: '-1%/day',
-    },
-    {
-        id: '4',
-        name: 'Market Square',
-        area: '2.4k m²',
-        defenseLevel: 'Low',
-        contested: '30m ago',
-        owner: 'ConquestMaster',
-        durability: 40,
-        decayRate: '-5%/day',
-    },
-    {
-        id: '5',
-        name: 'Stadium District',
-        area: '12.0k m²',
-        defenseLevel: 'High',
-        contested: '3d ago',
-        owner: 'ConquestMaster',
-        durability: 95,
-        decayRate: '-1%/day',
-    },
-];
+const getLevelLabel = (def) => {
+    if (def >= 7) return 'High';
+    if (def >= 4) return 'Medium';
+    return 'Low';
+};
 
-const TerritoryCard = ({ item, onLaunch }) => (
-    <View style={styles.card}>
-        <View style={styles.cardTop}>
-            {/* Map thumbnail placeholder */}
-            <View style={styles.mapThumb}>
-                <MaterialCommunityIcons name="map-marker-radius" size={28} color="rgba(91,99,211,0.5)" />
-            </View>
-            <View style={styles.cardInfo}>
-                <Text style={styles.cardName}>{item.name}</Text>
-                <Text style={styles.cardArea}>Area: {item.area}</Text>
-                <View style={styles.badgeRow}>
-                    <View style={[styles.badge, item.defenseLevel === 'High' ? styles.badgeHigh : item.defenseLevel === 'Medium' ? styles.badgeMed : styles.badgeLow]}>
-                        <Text style={styles.badgeText}>{item.defenseLevel}</Text>
+const TerritoryCard = ({ item, onLaunch }) => {
+    const defLabel = getLevelLabel(item.defenseLevel);
+    return (
+        <View style={styles.card}>
+            <View style={styles.cardTop}>
+                <View style={styles.mapThumb}>
+                    <MaterialCommunityIcons name="map-marker-radius" size={28} color="rgba(91,99,211,0.5)" />
+                </View>
+                <View style={styles.cardInfo}>
+                    <Text style={styles.cardName}>{item.name}</Text>
+                    <Text style={styles.cardArea}>Area: {item.area >= 1000 ? `${(item.area / 1000).toFixed(1)}k m²` : `${item.area.toFixed(0)} m²`}</Text>
+                    <View style={styles.badgeRow}>
+                        <View style={[styles.badge, defLabel === 'High' ? styles.badgeHigh : defLabel === 'Medium' ? styles.badgeMed : styles.badgeLow]}>
+                            <Text style={styles.badgeText}>{defLabel}</Text>
+                        </View>
+                        <Text style={styles.contestedText}>Lvl {item.defenseLevel}</Text>
                     </View>
-                    <Text style={styles.contestedText}>Contested {item.contested}</Text>
                 </View>
             </View>
-        </View>
 
-        <View style={styles.cardMid}>
-            <View style={styles.midItem}>
-                <Text style={styles.midLabel}>Owner</Text>
-                <Text style={styles.midValue}>{item.owner}</Text>
-            </View>
-            <View style={styles.midItem}>
-                <Text style={styles.midLabel}>Durability</Text>
-                <View style={styles.durabilityBarBg}>
-                    <View style={[styles.durabilityBarFill, { width: `${item.durability}%`, backgroundColor: item.durability > 70 ? '#2dd06e' : item.durability > 40 ? '#E8A838' : '#E53935' }]} />
+            <View style={styles.cardMid}>
+                <View style={styles.midItem}>
+                    <Text style={styles.midLabel}>Owner</Text>
+                    <Text style={styles.midValue}>You</Text>
                 </View>
-                <Text style={styles.midValue}>{item.durability}%</Text>
+                <View style={styles.midItem}>
+                    <Text style={styles.midLabel}>Durability</Text>
+                    <View style={styles.durabilityBarBg}>
+                        <View style={[styles.durabilityBarFill, { width: `${item.durability}%`, backgroundColor: item.durability > 70 ? '#2dd06e' : item.durability > 40 ? '#E8A838' : '#E53935' }]} />
+                    </View>
+                    <Text style={styles.midValue}>{item.durability}%</Text>
+                </View>
             </View>
-            <View style={styles.midItem}>
-                <Text style={styles.midLabel}>Decay Rate</Text>
-                <Text style={[styles.midValue, { color: '#E53935' }]}>{item.decayRate}</Text>
-            </View>
-        </View>
 
-        <View style={styles.cardActions}>
-            <TouchableOpacity style={styles.historyBtn} activeOpacity={0.8}>
-                <Ionicons name="time-outline" size={16} color="#7C83ED" />
-                <Text style={styles.historyBtnText}>View History</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.launchBtn} onPress={() => onLaunch(item)} activeOpacity={0.85}>
-                <MaterialCommunityIcons name="run-fast" size={16} color="#fff" />
-                <Text style={styles.launchBtnText}>Launch Run</Text>
-            </TouchableOpacity>
+            <View style={styles.cardActions}>
+                <TouchableOpacity style={styles.historyBtn} activeOpacity={0.8}>
+                    <Ionicons name="time-outline" size={16} color="#7C83ED" />
+                    <Text style={styles.historyBtnText}>View History</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.launchBtn} onPress={() => onLaunch(item)} activeOpacity={0.85}>
+                    <MaterialCommunityIcons name="run-fast" size={16} color="#fff" />
+                    <Text style={styles.launchBtnText}>Launch Run</Text>
+                </TouchableOpacity>
+            </View>
         </View>
-    </View>
-);
+    );
+};
 
 export default function TerritoryOverviewScreen({ navigation }) {
+    const [territories, setTerritories] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    const fetchTerritories = useCallback(async () => {
+        try {
+            const res = await api.get('/territories');
+            setTerritories(res.data.territories || []);
+        } catch (e) {
+            console.log('Territories fetch error:', e.message);
+            setTerritories([]);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchTerritories();
+    }, [fetchTerritories]);
+
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
             {/* Header */}
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>My Territories</Text>
-                <Ionicons name="filter-outline" size={22} color="#fff" />
+                <TouchableOpacity onPress={fetchTerritories} activeOpacity={0.7}>
+                    <Ionicons name="refresh-outline" size={22} color="#fff" />
+                </TouchableOpacity>
             </View>
 
             {/* World map overview placeholder */}
             <View style={styles.worldMap}>
                 <MaterialCommunityIcons name="earth" size={50} color="rgba(91,99,211,0.3)" />
-                <Text style={styles.worldMapText}>Territory Overview Map</Text>
+                <Text style={styles.worldMapText}>
+                    {territories.length} {territories.length === 1 ? 'Territory' : 'Territories'} Claimed
+                </Text>
             </View>
 
             <Text style={styles.listTitle}>Territory List</Text>
 
-            <FlatList
-                data={DUMMY_TERRITORIES}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                    <TerritoryCard
-                        item={item}
-                        onLaunch={() => navigation.navigate('StartCapture')}
-                    />
-                )}
-                contentContainerStyle={styles.listContent}
-                showsVerticalScrollIndicator={false}
-            />
+            {loading ? (
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                    <ActivityIndicator size="large" color="#5B63D3" />
+                </View>
+            ) : territories.length > 0 ? (
+                <FlatList
+                    data={territories}
+                    keyExtractor={(item) => item._id}
+                    renderItem={({ item }) => (
+                        <TerritoryCard
+                            item={item}
+                            onLaunch={() => navigation.navigate('StartCapture')}
+                        />
+                    )}
+                    contentContainerStyle={styles.listContent}
+                    showsVerticalScrollIndicator={false}
+                />
+            ) : (
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                    <MaterialCommunityIcons name="map-marker-off-outline" size={50} color="rgba(91,99,211,0.3)" />
+                    <Text style={{ color: '#666', marginTop: 12, fontSize: 14 }}>
+                        No territories yet. Go capture some!
+                    </Text>
+                </View>
+            )}
         </View>
     );
 }
@@ -158,7 +147,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center', alignItems: 'center', marginBottom: 16,
         borderWidth: 1, borderColor: 'rgba(91,99,211,0.15)',
     },
-    worldMapText: { color: '#555', fontSize: 12, marginTop: 6 },
+    worldMapText: { color: '#888', fontSize: 13, marginTop: 6, fontWeight: '600' },
     listTitle: { fontSize: 18, fontWeight: '700', color: '#fff', paddingHorizontal: 20, marginBottom: 10 },
     listContent: { paddingHorizontal: 16, paddingBottom: 100 },
     card: {

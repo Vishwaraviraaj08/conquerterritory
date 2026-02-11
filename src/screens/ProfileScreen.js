@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     StyleSheet,
     View,
@@ -6,15 +6,12 @@ import {
     TouchableOpacity,
     ScrollView,
     StatusBar,
+    ActivityIndicator,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-
-const ACHIEVEMENTS = [
-    { icon: 'trophy-outline', title: 'First Capture', desc: 'Claimed your first territory', color: '#FFD700' },
-    { icon: 'shield-checkmark-outline', title: '10 Day Streak', desc: '10 consecutive days of activity', color: '#2dd06e' },
-    { icon: 'flash-outline', title: 'Speed Demon', desc: 'Average speed > 12 km/h', color: '#E8A838' },
-    { icon: 'map-outline', title: 'Cartographer', desc: 'Captured 50+ territories', color: '#5B63D3' },
-];
+import { useNavigation } from '@react-navigation/native';
+import { useAuth } from '../context/AuthContext';
+import api from '../api';
 
 const StatBox = ({ icon, value, label, color }) => (
     <View style={styles.statBox}>
@@ -25,17 +22,62 @@ const StatBox = ({ icon, value, label, color }) => (
 );
 
 export default function ProfileScreen() {
+    const navigation = useNavigation();
+    const { user, logout } = useAuth();
+    const [profile, setProfile] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    const fetchProfile = useCallback(async () => {
+        try {
+            const res = await api.get('/users/profile');
+            setProfile(res.data.user);
+        } catch (e) {
+            console.log('Profile fetch error, using local user');
+            setProfile(user);
+        } finally {
+            setLoading(false);
+        }
+    }, [user]);
+
+    useEffect(() => {
+        fetchProfile();
+    }, [fetchProfile]);
+
+    const p = profile || user || {};
+    const stats = p.stats || {};
+
+    const formatArea = (v) => {
+        if (!v) return '0 m²';
+        if (v >= 1000) return `${(v / 1000).toFixed(1)}k m²`;
+        return `${v.toFixed(0)} m²`;
+    };
+    const formatDist = (v) => {
+        if (!v) return '0 m';
+        if (v >= 1000) return `${(v / 1000).toFixed(1)} km`;
+        return `${v.toFixed(0)} m`;
+    };
+
+    const achievements = p.achievements || [];
+
+    if (loading) {
+        return (
+            <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+                <ActivityIndicator size="large" color="#5B63D3" />
+            </View>
+        );
+    }
+
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 {/* Header */}
                 <View style={styles.header}>
-                    <TouchableOpacity activeOpacity={0.7}>
-                        <Ionicons name="arrow-back" size={22} color="#fff" />
-                    </TouchableOpacity>
+                    <View style={{ width: 22 }} />
                     <Text style={styles.headerTitle}>My Profile</Text>
-                    <Ionicons name="settings-outline" size={22} color="#fff" />
+                    <TouchableOpacity onPress={() => navigation.navigate('Settings')} activeOpacity={0.7}>
+                        <Ionicons name="settings-outline" size={22} color="#7C83ED" />
+                    </TouchableOpacity>
                 </View>
 
                 {/* Avatar & Username */}
@@ -46,8 +88,10 @@ export default function ProfileScreen() {
                         </View>
                         <View style={styles.onlineDot} />
                     </View>
-                    <Text style={styles.username}>ConquestMaster</Text>
-                    <Text style={styles.userTeam}>Alpha Wolves • Level 24</Text>
+                    <Text style={styles.username}>{p.username || 'Player'}</Text>
+                    <Text style={styles.userTeam}>
+                        {p.email || 'Adventurer'} • Level {Math.floor((stats.totalPoints || 0) / 100) + 1}
+                    </Text>
                 </View>
 
                 {/* Health Score */}
@@ -55,79 +99,90 @@ export default function ProfileScreen() {
                     <View style={styles.healthHeader}>
                         <MaterialCommunityIcons name="heart-pulse" size={18} color="#E53935" />
                         <Text style={styles.healthTitle}>Health Score</Text>
-                        <Text style={styles.healthValue}>87/100</Text>
+                        <Text style={styles.healthValue}>{stats.healthScore || 50}/100</Text>
                     </View>
                     <View style={styles.healthBarBg}>
-                        <View style={[styles.healthBarFill, { width: '87%' }]} />
+                        <View style={[styles.healthBarFill, { width: `${stats.healthScore || 50}%` }]} />
                     </View>
                 </View>
 
                 {/* Key Statistics */}
                 <Text style={styles.sectionTitle}>Key Statistics</Text>
                 <View style={styles.statsGrid}>
-                    <StatBox icon="vector-polygon" value="125.3k m²" label="Total Area" color="#5B63D3" />
-                    <StatBox icon="run-fast" value="342 km" label="Total Distance" color="#E8A838" />
-                    <StatBox icon="fire" value="28.5k" label="Calories" color="#E53935" />
-                    <StatBox icon="chart-line" value="45 days" label="Best Streak" color="#2dd06e" />
+                    <StatBox icon="vector-polygon" value={formatArea(stats.totalArea)} label="Total Area" color="#5B63D3" />
+                    <StatBox icon="run-fast" value={formatDist(stats.totalDistance)} label="Total Distance" color="#E8A838" />
+                    <StatBox icon="fire" value={`${(stats.caloriesBurned || 0).toLocaleString()}`} label="Calories" color="#E53935" />
+                    <StatBox icon="chart-line" value={`${stats.streak || 0} days`} label="Best Streak" color="#2dd06e" />
                 </View>
 
                 {/* Achievements */}
-                <Text style={styles.sectionTitle}>Achievements</Text>
+                <Text style={styles.sectionTitle}>Achievements ({achievements.length})</Text>
                 <View style={styles.achievementsList}>
-                    {ACHIEVEMENTS.map((ach, i) => (
+                    {achievements.length > 0 ? achievements.map((ach, i) => (
                         <View key={i} style={styles.achievementCard}>
-                            <View style={[styles.achievementIcon, { backgroundColor: ach.color + '20' }]}>
-                                <Ionicons name={ach.icon} size={20} color={ach.color} />
+                            <View style={[styles.achievementIcon, { backgroundColor: 'rgba(91,99,211,0.15)' }]}>
+                                <Ionicons name={ach.icon || 'trophy'} size={20} color="#5B63D3" />
                             </View>
                             <View style={styles.achievementInfo}>
                                 <Text style={styles.achievementTitle}>{ach.title}</Text>
-                                <Text style={styles.achievementDesc}>{ach.desc}</Text>
+                                <Text style={styles.achievementDesc}>{ach.description}</Text>
                             </View>
                             <Ionicons name="checkmark-circle" size={20} color="#2dd06e" />
                         </View>
-                    ))}
+                    )) : (
+                        <Text style={{ color: '#666', textAlign: 'center', padding: 20, fontSize: 13 }}>
+                            Complete captures to earn achievements!
+                        </Text>
+                    )}
                 </View>
 
                 {/* Connected Devices */}
                 <Text style={styles.sectionTitle}>Connected Devices</Text>
-                <View style={styles.deviceCard}>
-                    <MaterialCommunityIcons name="watch" size={22} color="#5B63D3" />
-                    <View style={styles.deviceInfo}>
-                        <Text style={styles.deviceName}>Apple Watch Series 8</Text>
-                        <Text style={styles.deviceStatus}>Connected • Synced 5m ago</Text>
+                {(p.connectedDevices || []).length > 0 ? p.connectedDevices.map((dev, i) => (
+                    <View key={i} style={styles.deviceCard}>
+                        <MaterialCommunityIcons name={dev.type === 'watch' ? 'watch' : 'cellphone'} size={22} color="#5B63D3" />
+                        <View style={styles.deviceInfo}>
+                            <Text style={styles.deviceName}>{dev.name}</Text>
+                            <Text style={styles.deviceStatus}>Connected</Text>
+                        </View>
+                        <View style={styles.connectedBadge}>
+                            <Text style={styles.connectedBadgeText}>Active</Text>
+                        </View>
                     </View>
-                    <View style={styles.connectedBadge}>
-                        <Text style={styles.connectedBadgeText}>Active</Text>
+                )) : (
+                    <View style={styles.deviceCard}>
+                        <MaterialCommunityIcons name="cellphone" size={22} color="#5B63D3" />
+                        <View style={styles.deviceInfo}>
+                            <Text style={styles.deviceName}>This Device</Text>
+                            <Text style={styles.deviceStatus}>Primary Device</Text>
+                        </View>
+                        <View style={styles.connectedBadge}>
+                            <Text style={styles.connectedBadgeText}>Active</Text>
+                        </View>
                     </View>
-                </View>
-
-                <View style={styles.deviceCard}>
-                    <MaterialCommunityIcons name="cellphone" size={22} color="#5B63D3" />
-                    <View style={styles.deviceInfo}>
-                        <Text style={styles.deviceName}>iPhone 15 Pro</Text>
-                        <Text style={styles.deviceStatus}>Primary Device</Text>
-                    </View>
-                    <View style={styles.connectedBadge}>
-                        <Text style={styles.connectedBadgeText}>Active</Text>
-                    </View>
-                </View>
+                )}
 
                 {/* Settings & Appeals */}
                 <Text style={styles.sectionTitle}>Settings & Appeals</Text>
                 <View style={styles.settingsCard}>
-                    <TouchableOpacity style={styles.settingsItem} activeOpacity={0.7}>
+                    <TouchableOpacity style={styles.settingsItem} activeOpacity={0.7} onPress={() => navigation.navigate('Settings')}>
                         <Ionicons name="notifications-outline" size={20} color="#7C83ED" />
                         <Text style={styles.settingsText}>Notifications</Text>
                         <Ionicons name="chevron-forward" size={18} color="#555" />
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.settingsItem} activeOpacity={0.7}>
+                    <TouchableOpacity style={styles.settingsItem} activeOpacity={0.7} onPress={() => navigation.navigate('Settings')}>
                         <Ionicons name="lock-closed-outline" size={20} color="#7C83ED" />
                         <Text style={styles.settingsText}>Privacy Settings</Text>
                         <Ionicons name="chevron-forward" size={18} color="#555" />
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.settingsItem} activeOpacity={0.7}>
+                    <TouchableOpacity style={styles.settingsItem} activeOpacity={0.7} onPress={() => navigation.navigate('Settings')}>
                         <Ionicons name="flag-outline" size={20} color="#7C83ED" />
                         <Text style={styles.settingsText}>Appeals & Support</Text>
+                        <Ionicons name="chevron-forward" size={18} color="#555" />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.settingsItem} activeOpacity={0.7} onPress={() => navigation.navigate('Settings')}>
+                        <Ionicons name="settings-outline" size={20} color="#7C83ED" />
+                        <Text style={styles.settingsText}>All Settings</Text>
                         <Ionicons name="chevron-forward" size={18} color="#555" />
                     </TouchableOpacity>
                 </View>

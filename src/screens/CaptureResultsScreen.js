@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
     StyleSheet,
     View,
@@ -6,8 +6,11 @@ import {
     TouchableOpacity,
     ScrollView,
     StatusBar,
+    ActivityIndicator,
+    Alert,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import api from '../api';
 
 export default function CaptureResultsScreen({ navigation, route }) {
     const {
@@ -18,13 +21,51 @@ export default function CaptureResultsScreen({ navigation, route }) {
         maxSpeed = '15.2',
         pace = '7:03',
         points = 850,
+        calories = 480,
+        path = null,
     } = route.params || {};
+
+    const [saving, setSaving] = useState(false);
+    const [saved, setSaved] = useState(false);
 
     const formatTime = (seconds) => {
         const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
         const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
         const s = (seconds % 60).toString().padStart(2, '0');
         return `${h}:${m}:${s}`;
+    };
+
+    const handleConfirm = async () => {
+        if (saved) {
+            navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
+            return;
+        }
+
+        setSaving(true);
+        try {
+            const captureData = {
+                path: path || {
+                    type: 'LineString',
+                    coordinates: [[0, 0], [0.001, 0.001]],
+                },
+                distance: parseFloat(distance) || 0,
+                duration: parseInt(time) || 0,
+                avgSpeed: parseFloat(avgSpeed) || 0,
+                maxSpeed: parseFloat(maxSpeed) || 0,
+                pace: pace || '--:--',
+                calories: parseInt(calories) || 0,
+                area: parseFloat(area) || 0,
+                points: parseInt(points) || 0,
+            };
+
+            await api.post('/captures', captureData);
+            setSaved(true);
+        } catch (err) {
+            const msg = err.response?.data?.error || 'Failed to save capture';
+            Alert.alert('Error', msg);
+        } finally {
+            setSaving(false);
+        }
     };
 
     return (
@@ -91,24 +132,33 @@ export default function CaptureResultsScreen({ navigation, route }) {
                 <View style={styles.card}>
                     <View style={styles.caloriesRow}>
                         <MaterialCommunityIcons name="fire" size={22} color="#E8A838" />
-                        <Text style={styles.caloriesValue}>480 kcal</Text>
+                        <Text style={styles.caloriesValue}>{calories} kcal</Text>
                     </View>
                     <Text style={styles.caloriesLabel}>Calories Burned</Text>
                 </View>
 
                 {/* Capture Validated */}
                 <View style={styles.validatedRow}>
-                    <Ionicons name="checkmark-circle" size={22} color="#2dd06e" />
-                    <Text style={styles.validatedText}>Capture Validated</Text>
+                    <Ionicons name={saved ? "checkmark-circle" : "ellipse-outline"} size={22} color={saved ? "#2dd06e" : "#888"} />
+                    <Text style={[styles.validatedText, !saved && { color: '#888' }]}>
+                        {saved ? 'Capture Saved!' : 'Pending Confirmation'}
+                    </Text>
                 </View>
 
                 {/* Buttons */}
                 <TouchableOpacity
-                    style={styles.confirmBtn}
-                    onPress={() => navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] })}
+                    style={[styles.confirmBtn, saving && { opacity: 0.7 }]}
+                    onPress={handleConfirm}
                     activeOpacity={0.85}
+                    disabled={saving}
                 >
-                    <Text style={styles.confirmBtnText}>Confirm Capture</Text>
+                    {saving ? (
+                        <ActivityIndicator color="#fff" />
+                    ) : (
+                        <Text style={styles.confirmBtnText}>
+                            {saved ? 'Go Home' : 'Confirm Capture'}
+                        </Text>
+                    )}
                 </TouchableOpacity>
 
                 <View style={styles.secondaryBtns}>
