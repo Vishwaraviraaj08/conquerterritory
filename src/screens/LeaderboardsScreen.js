@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     StyleSheet,
     View,
@@ -8,20 +8,38 @@ import {
     Switch,
     StatusBar,
     ActivityIndicator,
+    Modal,
+    Image,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useScrollToTop } from '@react-navigation/native';
 import api from '../api';
+import UserProfileModal from '../components/UserProfileModal';
+import FriendRequestsModal from '../components/FriendRequestsModal';
+import { useNotifications } from '../context/NotificationContext';
+import { useAuth } from '../context/AuthContext';
 
 const SCOPE_FILTERS = ['Local', 'State', 'Country', 'Global', 'Team'];
 const SCOPE_MAP = { Local: 'local', State: 'state', Country: 'country', Global: 'global', Team: 'team' };
 
-const LeaderItem = ({ item }) => (
-    <View style={styles.leaderCard}>
+const PERIOD_OPTIONS = [
+    { label: 'Daily', value: 'daily' },
+    { label: 'Weekly', value: 'weekly' },
+    { label: 'Monthly', value: 'monthly' },
+    { label: 'All Time', value: 'alltime' },
+];
+
+const LeaderItem = ({ item, onPress }) => (
+    <TouchableOpacity style={styles.leaderCard} onPress={() => onPress(item)} activeOpacity={0.8}>
         <View style={[styles.rankCircle, item.rank <= 3 && { borderColor: item.rank === 1 ? '#FFD700' : item.rank === 2 ? '#C0C0C0' : '#CD7F32', borderWidth: 2 }]}>
             <Text style={[styles.rankText, item.rank <= 3 && { color: item.rank === 1 ? '#FFD700' : item.rank === 2 ? '#C0C0C0' : '#CD7F32' }]}>{item.rank}</Text>
         </View>
         <View style={styles.avatarSmall}>
-            <Ionicons name="person" size={20} color="#7C83ED" />
+            {item.profileImage ? (
+                <Image source={{ uri: item.profileImage }} style={{ width: 36, height: 36, borderRadius: 18 }} />
+            ) : (
+                <Ionicons name="person" size={20} color="#7C83ED" />
+            )}
         </View>
         <View style={styles.leaderInfo}>
             <Text style={styles.leaderName}>{item.username}</Text>
@@ -37,15 +55,30 @@ const LeaderItem = ({ item }) => (
                 <Text style={styles.leaderStatValue}>{((item.totalArea || 0) / 1000).toFixed(1)}k m²</Text>
             </View>
         </View>
-    </View>
+    </TouchableOpacity>
 );
 
 export default function LeaderboardsScreen() {
     const [activeScope, setActiveScope] = useState('Global');
+    const [activePeriod, setActivePeriod] = useState('alltime');
+    const [periodLabel, setPeriodLabel] = useState('All Time');
+    const [showPeriodPicker, setShowPeriodPicker] = useState(false);
     const [friendsOnly, setFriendsOnly] = useState(false);
     const [leaderboard, setLeaderboard] = useState([]);
     const [userRank, setUserRank] = useState(null);
     const [loading, setLoading] = useState(true);
+
+    // User profile modal
+    const [selectedUserId, setSelectedUserId] = useState(null);
+    const [showProfileModal, setShowProfileModal] = useState(false);
+
+    // Friend Requests modal
+    const [showRequestsModal, setShowRequestsModal] = useState(false);
+    const { unreadCount } = useNotifications();
+    const { user } = useAuth();
+
+    const listRef = useRef(null);
+    useScrollToTop(listRef);
 
     const fetchLeaderboard = useCallback(async () => {
         setLoading(true);
@@ -53,8 +86,9 @@ export default function LeaderboardsScreen() {
             const res = await api.get('/leaderboards', {
                 params: {
                     scope: SCOPE_MAP[activeScope] || 'global',
-                    period: 'alltime',
+                    period: activePeriod,
                     limit: 20,
+                    friendsOnly: friendsOnly ? 'true' : 'false',
                 },
             });
             setLeaderboard(res.data.leaderboard || []);
@@ -65,11 +99,24 @@ export default function LeaderboardsScreen() {
         } finally {
             setLoading(false);
         }
-    }, [activeScope]);
+    }, [activeScope, activePeriod, friendsOnly]);
 
     useEffect(() => {
         fetchLeaderboard();
     }, [fetchLeaderboard]);
+
+    const handleUserPress = (item) => {
+        if (item.userId && user && item.userId !== user._id) {
+            setSelectedUserId(item.userId);
+            setShowProfileModal(true);
+        }
+    };
+
+    const handlePeriodSelect = (option) => {
+        setActivePeriod(option.value);
+        setPeriodLabel(option.label);
+        setShowPeriodPicker(false);
+    };
 
     return (
         <View style={styles.container}>
@@ -77,13 +124,27 @@ export default function LeaderboardsScreen() {
             {/* Header */}
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Leaderboards</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    {userRank && (
-                        <Text style={{ color: '#E8A838', fontWeight: '700', fontSize: 14 }}>
-                            #{userRank}
-                        </Text>
-                    )}
-                    <Ionicons name="trophy-outline" size={22} color="#E8A838" />
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <TouchableOpacity
+                        style={styles.requestIconBtn}
+                        onPress={() => setShowRequestsModal(true)}
+                    >
+                        <Ionicons name="mail-outline" size={24} color="#ccc" />
+                        {unreadCount > 0 && (
+                            <View style={styles.badge}>
+                                <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                            </View>
+                        )}
+                    </TouchableOpacity>
+
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        {userRank && (
+                            <Text style={{ color: '#E8A838', fontWeight: '700', fontSize: 14 }}>
+                                #{userRank}
+                            </Text>
+                        )}
+                        <Ionicons name="trophy-outline" size={22} color="#E8A838" />
+                    </View>
                 </View>
             </View>
 
@@ -105,11 +166,15 @@ export default function LeaderboardsScreen() {
 
             {/* Controls row */}
             <View style={styles.controlsRow}>
-                <View style={styles.timeWindow}>
+                <TouchableOpacity
+                    style={styles.timeWindow}
+                    onPress={() => setShowPeriodPicker(true)}
+                    activeOpacity={0.8}
+                >
                     <Ionicons name="time-outline" size={16} color="#7C83ED" />
-                    <Text style={styles.timeWindowText}>All Time</Text>
+                    <Text style={styles.timeWindowText}>{periodLabel}</Text>
                     <Ionicons name="chevron-down" size={14} color="#888" />
-                </View>
+                </TouchableOpacity>
                 <View style={styles.friendsToggle}>
                     <Text style={styles.friendsText}>Friends Only</Text>
                     <Switch
@@ -140,9 +205,10 @@ export default function LeaderboardsScreen() {
                 </View>
             ) : leaderboard.length > 0 ? (
                 <FlatList
+                    ref={listRef}
                     data={leaderboard}
                     keyExtractor={(item, index) => (item.userId || index).toString()}
-                    renderItem={({ item }) => <LeaderItem item={item} />}
+                    renderItem={({ item }) => <LeaderItem item={item} onPress={handleUserPress} />}
                     contentContainerStyle={styles.listContent}
                     showsVerticalScrollIndicator={false}
                 />
@@ -154,6 +220,43 @@ export default function LeaderboardsScreen() {
                     </Text>
                 </View>
             )}
+
+            {/* Period Picker Modal */}
+            <Modal visible={showPeriodPicker} transparent animationType="fade" onRequestClose={() => setShowPeriodPicker(false)}>
+                <TouchableOpacity style={styles.pickerOverlay} activeOpacity={1} onPress={() => setShowPeriodPicker(false)}>
+                    <View style={styles.pickerContainer}>
+                        <Text style={styles.pickerTitle}>Select Time Period</Text>
+                        {PERIOD_OPTIONS.map((opt) => (
+                            <TouchableOpacity
+                                key={opt.value}
+                                style={[styles.pickerOption, activePeriod === opt.value && styles.pickerOptionActive]}
+                                onPress={() => handlePeriodSelect(opt)}
+                                activeOpacity={0.8}
+                            >
+                                <Text style={[styles.pickerOptionText, activePeriod === opt.value && styles.pickerOptionTextActive]}>
+                                    {opt.label}
+                                </Text>
+                                {activePeriod === opt.value && (
+                                    <Ionicons name="checkmark" size={18} color="#5B63D3" />
+                                )}
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+
+            {/* User Profile Modal */}
+            <UserProfileModal
+                visible={showProfileModal}
+                userId={selectedUserId}
+                onClose={() => setShowProfileModal(false)}
+            />
+
+            {/* Friend Requests Modal */}
+            <FriendRequestsModal
+                visible={showRequestsModal}
+                onClose={() => setShowRequestsModal(false)}
+            />
         </View>
     );
 }
@@ -165,6 +268,20 @@ const styles = StyleSheet.create({
         paddingTop: 50, paddingHorizontal: 20, paddingBottom: 14,
     },
     headerTitle: { fontSize: 22, fontWeight: '800', color: '#fff' },
+    requestIconBtn: {
+        width: 40, height: 40, borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        justifyContent: 'center', alignItems: 'center',
+        borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+    },
+    badge: {
+        position: 'absolute', top: -2, right: -2,
+        minWidth: 18, height: 18, borderRadius: 9,
+        backgroundColor: '#ff4444',
+        justifyContent: 'center', alignItems: 'center',
+        paddingHorizontal: 4, borderWidth: 2, borderColor: '#0a0e1a',
+    },
+    badgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
     filterRow: {
         flexDirection: 'row', paddingHorizontal: 16, gap: 8, marginBottom: 14,
     },
@@ -208,7 +325,7 @@ const styles = StyleSheet.create({
     rankText: { fontSize: 14, fontWeight: '800', color: '#ccc' },
     avatarSmall: {
         width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(91,99,211,0.1)',
-        justifyContent: 'center', alignItems: 'center',
+        justifyContent: 'center', alignItems: 'center', overflow: 'hidden',
     },
     leaderInfo: { flex: 1 },
     leaderName: { fontSize: 14, fontWeight: '700', color: '#fff' },
@@ -216,4 +333,25 @@ const styles = StyleSheet.create({
     leaderStats: { alignItems: 'flex-end' },
     leaderStatItem: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 },
     leaderStatValue: { fontSize: 12, fontWeight: '600', color: '#ccc' },
+    // Period Picker
+    pickerOverlay: {
+        flex: 1, backgroundColor: 'rgba(0,0,0,0.6)',
+        justifyContent: 'center', alignItems: 'center', padding: 40,
+    },
+    pickerContainer: {
+        width: '100%', maxWidth: 300, backgroundColor: '#111528',
+        borderRadius: 20, padding: 20,
+        borderWidth: 1, borderColor: 'rgba(91,99,211,0.2)',
+    },
+    pickerTitle: {
+        fontSize: 16, fontWeight: '700', color: '#fff',
+        textAlign: 'center', marginBottom: 16,
+    },
+    pickerOption: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        paddingVertical: 14, paddingHorizontal: 16, borderRadius: 12, marginBottom: 4,
+    },
+    pickerOptionActive: { backgroundColor: 'rgba(91,99,211,0.12)' },
+    pickerOptionText: { fontSize: 15, fontWeight: '600', color: '#ccc' },
+    pickerOptionTextActive: { color: '#5B63D3' },
 });

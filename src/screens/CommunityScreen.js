@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     StyleSheet,
     View,
@@ -6,56 +6,96 @@ import {
     TouchableOpacity,
     ScrollView,
     StatusBar,
-    Image,
+    ActivityIndicator,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useScrollToTop } from '@react-navigation/native';
+import api from '../api';
 
-const CHALLENGES = [
-    { id: '1', title: 'Weekend Warrior', desc: 'Capture 5 territories this weekend', reward: '500 pts', icon: 'sword-cross', progress: 60 },
-    { id: '2', title: 'Marathon Runner', desc: 'Cover 42km in a week', reward: '1000 pts', icon: 'run-fast', progress: 35 },
-    { id: '3', title: 'Team Spirit', desc: 'Win 3 team battles', reward: '750 pts', icon: 'account-group', progress: 80 },
-];
+export default function CommunityScreen({ navigation }) {
+    const scrollRef = useRef(null);
+    useScrollToTop(scrollRef);
 
-const SOCIAL_FEED = [
-    {
-        id: '1',
-        user: 'RunnerX',
-        time: '2h ago',
-        text: 'Just captured a massive 15k m² territory downtown! New personal record! 🏆',
-        likes: 24,
-        comments: 8,
-    },
-    {
-        id: '2',
-        user: 'GeoMaster',
-        time: '5h ago',
-        text: "Our team Alpha Wolves just defended 3 territories in a row. Nobody's touching our turf! 🐺",
-        likes: 45,
-        comments: 12,
-    },
-    {
-        id: '3',
-        user: 'TrailBlazer',
-        time: '8h ago',
-        text: 'Morning run turned into a 25-minute capture session. Love how this game makes exercise fun! 💪',
-        likes: 31,
-        comments: 5,
-    },
-];
+    const [loading, setLoading] = useState(true);
+    const [challenges, setChallenges] = useState([]);
+    const [socialFeed, setSocialFeed] = useState([]);
+    const [teamInfo, setTeamInfo] = useState(null);
 
-export default function CommunityScreen() {
+    useEffect(() => {
+        fetchCommunityData();
+    }, []);
+
+    const fetchCommunityData = async () => {
+        try {
+            const [challengesRes, feedRes, profileRes] = await Promise.allSettled([
+                api.get('/users/challenges'),
+                api.get('/users/feed'),
+                api.get('/users/profile'),
+            ]);
+
+            if (challengesRes.status === 'fulfilled' && challengesRes.value.data.challenges) {
+                setChallenges(challengesRes.value.data.challenges);
+            } else {
+                setChallenges(getDefaultChallenges());
+            }
+
+            if (feedRes.status === 'fulfilled' && feedRes.value.data.feed) {
+                setSocialFeed(feedRes.value.data.feed);
+            } else {
+                setSocialFeed(getDefaultFeed());
+            }
+
+            if (profileRes.status === 'fulfilled') {
+                const user = profileRes.value.data.user;
+                if (user?.team) {
+                    setTeamInfo(user.team);
+                }
+            }
+        } catch (e) {
+            setChallenges(getDefaultChallenges());
+            setSocialFeed(getDefaultFeed());
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const getDefaultChallenges = () => {
+        return [
+            { id: '1', title: 'Weekend Warrior', desc: 'Capture 5 territories this weekend', reward: '500 pts', icon: 'sword-cross', progress: 0 },
+            { id: '2', title: 'Marathon Runner', desc: 'Cover 42km in a week', reward: '1000 pts', icon: 'run-fast', progress: 0 },
+            { id: '3', title: 'Team Spirit', desc: 'Win 3 team battles', reward: '750 pts', icon: 'account-group', progress: 0 },
+        ];
+    };
+
+    const getDefaultFeed = () => {
+        return [
+            { id: '1', user: 'No posts yet', time: '', text: 'Start capturing territories to see activity here!', likes: 0, comments: 0 },
+        ];
+    };
+
+    if (loading) {
+        return (
+            <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+                <ActivityIndicator size="large" color="#5B63D3" />
+                <Text style={{ color: '#888', marginTop: 10 }}>Loading community...</Text>
+            </View>
+        );
+    }
+
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <ScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 {/* Header */}
                 <View style={styles.header}>
                     <Text style={styles.headerTitle}>Community</Text>
                     <View style={styles.headerIcons}>
-                        <TouchableOpacity style={styles.headerIconBtn} activeOpacity={0.7}>
+                        <TouchableOpacity style={styles.headerIconBtn} activeOpacity={0.7}
+                            onPress={() => navigation.navigate('Settings')}>
                             <Ionicons name="notifications-outline" size={22} color="#fff" />
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.headerIconBtn} activeOpacity={0.7}>
+                        <TouchableOpacity style={styles.headerIconBtn} activeOpacity={0.7}
+                            onPress={() => navigation.navigate('Settings')}>
                             <Ionicons name="settings-outline" size={22} color="#fff" />
                         </TouchableOpacity>
                     </View>
@@ -64,15 +104,15 @@ export default function CommunityScreen() {
                 {/* Community Challenges */}
                 <Text style={styles.sectionTitle}>Community Challenges</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.challengeScroll}>
-                    {CHALLENGES.map((ch) => (
+                    {challenges.map((ch) => (
                         <View key={ch.id} style={styles.challengeCard}>
                             <View style={styles.challengeIconWrap}>
-                                <MaterialCommunityIcons name={ch.icon} size={24} color="#5B63D3" />
+                                <MaterialCommunityIcons name={ch.icon || 'star'} size={24} color="#5B63D3" />
                             </View>
                             <Text style={styles.challengeTitle}>{ch.title}</Text>
                             <Text style={styles.challengeDesc}>{ch.desc}</Text>
                             <View style={styles.challengeProgressBg}>
-                                <View style={[styles.challengeProgressFill, { width: `${ch.progress}%` }]} />
+                                <View style={[styles.challengeProgressFill, { width: `${ch.progress || 0}%` }]} />
                             </View>
                             <Text style={styles.challengeReward}>{ch.reward}</Text>
                         </View>
@@ -87,8 +127,10 @@ export default function CommunityScreen() {
                             <MaterialCommunityIcons name="shield-account" size={28} color="#5B63D3" />
                         </View>
                         <View style={styles.teamInfo}>
-                            <Text style={styles.teamName}>Alpha Wolves</Text>
-                            <Text style={styles.teamMembers}>24 members • Rank #3 Local</Text>
+                            <Text style={styles.teamName}>{teamInfo?.name || 'No Team'}</Text>
+                            <Text style={styles.teamMembers}>
+                                {teamInfo ? `${teamInfo.members || 0} members` : 'Join or create a team to compete'}
+                            </Text>
                         </View>
                     </View>
                     <View style={styles.teamActions}>
@@ -106,7 +148,7 @@ export default function CommunityScreen() {
 
                 {/* Social Feed */}
                 <Text style={styles.sectionTitle}>Social Feed</Text>
-                {SOCIAL_FEED.map((post) => (
+                {socialFeed.map((post) => (
                     <View key={post.id} style={styles.feedCard}>
                         <View style={styles.feedHeader}>
                             <View style={styles.feedAvatar}>
@@ -140,12 +182,14 @@ export default function CommunityScreen() {
                 {/* Support & Settings */}
                 <Text style={styles.sectionTitle}>Support & Settings</Text>
                 <View style={styles.supportCard}>
-                    <TouchableOpacity style={styles.supportItem} activeOpacity={0.7}>
+                    <TouchableOpacity style={styles.supportItem} activeOpacity={0.7}
+                        onPress={() => navigation.navigate('Settings')}>
                         <Ionicons name="help-circle-outline" size={20} color="#7C83ED" />
                         <Text style={styles.supportText}>Help Center</Text>
                         <Ionicons name="chevron-forward" size={18} color="#555" />
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.supportItem} activeOpacity={0.7}>
+                    <TouchableOpacity style={styles.supportItem} activeOpacity={0.7}
+                        onPress={() => navigation.navigate('Settings')}>
                         <Ionicons name="chatbubble-ellipses-outline" size={20} color="#7C83ED" />
                         <Text style={styles.supportText}>Feedback</Text>
                         <Ionicons name="chevron-forward" size={18} color="#555" />

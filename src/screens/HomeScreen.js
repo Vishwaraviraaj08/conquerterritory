@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     StyleSheet,
     View,
@@ -8,12 +8,14 @@ import {
     ActivityIndicator,
     Switch,
     StatusBar,
+    Modal,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { requestLocationPermissions } from '../utils/location';
 import { useAuth } from '../context/AuthContext';
+import { useTracking } from '../context/TrackingContext';
 import api from '../api';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
@@ -34,36 +36,48 @@ const getMapHtml = () => `
         .tt-logo { display: none !important; }
 
         @keyframes pulse {
-            0% { transform: scale(1); opacity: 0.6; }
-            50% { transform: scale(1.4); opacity: 0; }
-            100% { transform: scale(1); opacity: 0; }
+            0% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
+            50% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+        }
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 6px rgba(0,200,255,0.5); }
+            50% { box-shadow: 0 0 16px rgba(0,200,255,0.8); }
         }
 
         .user-marker {
-            width: 44px; height: 44px; position: relative;
-            display: flex; align-items: center; justify-content: center;
+            width: 48px; height: 48px; position: relative;
         }
         .marker-pulse {
-            position: absolute; width: 44px; height: 44px; border-radius: 50%;
-            background: rgba(91,99,211,0.25);
-            animation: pulse 2s ease-out infinite;
+            position: absolute; width: 48px; height: 48px; border-radius: 50%;
+            background: radial-gradient(circle, rgba(0,200,255,0.35) 0%, transparent 70%);
+            left: 50%; top: 50%;
+            animation: pulse 2.5s ease-out infinite;
         }
         .marker-ring {
-            position: absolute; width: 28px; height: 28px; border-radius: 50%;
-            background: rgba(91,99,211,0.2);
-            border: 2.5px solid rgba(124,131,237,0.6);
+            position: absolute; width: 30px; height: 30px; border-radius: 50%;
+            border: 2px solid rgba(0,200,255,0.5);
+            background: rgba(0,200,255,0.08);
+            left: 50%; top: 50%; transform: translate(-50%, -50%);
         }
         .marker-dot {
             position: absolute; width: 14px; height: 14px; border-radius: 50%;
-            background: linear-gradient(135deg, #7C83ED, #5B63D3);
+            background: radial-gradient(circle at 35% 35%, #00e5ff, #0088cc);
             border: 2.5px solid #fff;
-            box-shadow: 0 0 8px rgba(91,99,211,0.5);
+            left: 50%; top: 50%; transform: translate(-50%, -50%);
             z-index: 2;
+            animation: glow 2s ease-in-out infinite;
         }
-        .marker-heading {
-            position: absolute; top: -4px; width: 0; height: 0;
-            border-left: 5px solid transparent; border-right: 5px solid transparent;
-            border-bottom: 10px solid #5B63D3; z-index: 1;
+        .marker-arrow {
+            position: absolute;
+            left: 50%; top: 0px;
+            transform: translateX(-50%);
+            width: 0; height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-bottom: 12px solid #00c8ff;
+            filter: drop-shadow(0 0 3px rgba(0,200,255,0.6));
+            z-index: 3;
             transition: transform 0.3s ease;
         }
     </style>
@@ -80,13 +94,12 @@ const getMapHtml = () => `
         };
 
         var map, userMarker, is3D = false, currentLat = 0, currentLng = 0;
+        var territoryLayers = [];
+        var territoryData = {};
 
         function initMap() {
             try {
-                if (!window.tt) {
-                    setTimeout(initMap, 500);
-                    return;
-                }
+                if (!window.tt) { setTimeout(initMap, 500); return; }
                 tt.setProductInfo('GeoConquest', '1.0.0');
                 map = tt.map({
                     key: '${TOMTOM_API_KEY}',
@@ -94,18 +107,13 @@ const getMapHtml = () => `
                     style: 'https://api.tomtom.com/map/1/style/20.0.0-8/basic_main.json',
                     center: [0, 0],
                     zoom: 2,
-                    pitch: 0,
-                    bearing: 0,
-                    dragRotate: true,
-                    touchPitch: true
+                    pitch: 0, bearing: 0,
+                    dragRotate: true, touchPitch: true
                 });
                 map.on('load', function() {
                     try {
                         var sources = map.getStyle().sources;
-                        var sourceId = null;
-                        if (sources.vectorTiles) sourceId = 'vectorTiles';
-                        else if (sources.vector) sourceId = 'vector';
-                        else if (sources.composite) sourceId = 'composite';
+                        var sourceId = sources.vectorTiles ? 'vectorTiles' : sources.vector ? 'vector' : sources.composite ? 'composite' : null;
                         if (sourceId) {
                             map.addLayer({
                                 id: '3d-buildings', source: sourceId, 'source-layer': 'building',
@@ -125,7 +133,7 @@ const getMapHtml = () => `
                     el.innerHTML = '<div class="marker-pulse"></div>'
                         + '<div class="marker-ring"></div>'
                         + '<div class="marker-dot"></div>'
-                        + '<div class="marker-heading" id="heading-arrow"></div>';
+                        + '<div class="marker-arrow" id="heading-arrow"></div>';
                     userMarker = new tt.Marker({ element: el, anchor: 'center' }).setLngLat([0, 0]).addTo(map);
 
                     window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'MAP_READY' }));
@@ -137,17 +145,14 @@ const getMapHtml = () => `
 
         function updateLocation(lat, lng, heading) {
             if (!map) return;
-            currentLat = lat;
-            currentLng = lng;
+            currentLat = lat; currentLng = lng;
             var center = [lng, lat];
             userMarker.setLngLat(center);
-
             var arrow = document.getElementById('heading-arrow');
             if (arrow && heading !== null && heading !== undefined) {
-                arrow.style.transform = 'rotate(' + heading + 'deg)';
+                arrow.style.transform = 'translateX(-50%) rotate(' + heading + 'deg)';
                 arrow.style.display = 'block';
             }
-
             map.easeTo({
                 center: center,
                 bearing: is3D ? (heading || 0) : 0,
@@ -159,22 +164,74 @@ const getMapHtml = () => `
 
         function toggle3D(enable) {
             is3D = enable;
-            map.easeTo({
-                pitch: is3D ? 60 : 0,
-                zoom: is3D ? 18 : 16,
-                bearing: is3D ? 0 : 0,
-                duration: 1200
-            });
+            map.easeTo({ pitch: is3D ? 60 : 0, zoom: is3D ? 18 : 16, bearing: 0, duration: 1200 });
             window.ReactNativeWebView.postMessage(JSON.stringify({ type: '3D_CHANGED', is3D: is3D }));
         }
 
         function centerOnUser() {
             if (!map) return;
-            map.flyTo({
-                center: [currentLng, currentLat],
-                zoom: is3D ? 18 : 16,
-                pitch: is3D ? 60 : 0,
-                duration: 1000
+            map.flyTo({ center: [currentLng, currentLat], zoom: is3D ? 18 : 16, pitch: is3D ? 60 : 0, duration: 1000 });
+        }
+
+        function addTerritories(territories) {
+            // Remove old layers/sources
+            territoryLayers.forEach(function(id) {
+                if (map.getLayer(id + '-fill')) map.removeLayer(id + '-fill');
+                if (map.getLayer(id + '-line')) map.removeLayer(id + '-line');
+                if (map.getSource(id)) map.removeSource(id);
+            });
+            territoryLayers = [];
+            territoryData = {};
+
+            territories.forEach(function(t, i) {
+                var srcId = 'territory-' + i;
+                territoryLayers.push(srcId);
+                territoryData[srcId] = t;
+
+                var coords = t.coordinates && t.coordinates.coordinates ? t.coordinates.coordinates : t.polygon;
+                if (!coords || !coords[0] || coords[0].length < 3) return;
+
+                map.addSource(srcId, {
+                    type: 'geojson',
+                    data: {
+                        type: 'Feature',
+                        properties: { id: srcId },
+                        geometry: { type: 'Polygon', coordinates: coords }
+                    }
+                });
+
+                map.addLayer({
+                    id: srcId + '-fill', type: 'fill', source: srcId,
+                    paint: {
+                        'fill-color': t.isMine ? 'rgba(91,99,211,0.3)' : 'rgba(232,168,56,0.2)',
+                        'fill-outline-color': t.isMine ? '#5B63D3' : '#E8A838'
+                    }
+                });
+                map.addLayer({
+                    id: srcId + '-line', type: 'line', source: srcId,
+                    paint: {
+                        'line-color': t.isMine ? '#7C83ED' : '#E8A838',
+                        'line-width': 2
+                    }
+                });
+
+                map.on('click', srcId + '-fill', function(e) {
+                    var td = territoryData[srcId];
+                    window.ReactNativeWebView.postMessage(JSON.stringify({
+                        type: 'TERRITORY_TAP',
+                        territory: {
+                            id: td._id || srcId,
+                            name: td.name || 'Territory',
+                            area: td.area || 0,
+                            capturedAt: td.capturedAt || '',
+                            gameMode: td.gameMode || 'solo',
+                            owner: td.ownerName || 'You',
+                            distance: td.captureDistance || 0,
+                            duration: td.captureDuration || 0,
+                            avgSpeed: td.captureAvgSpeed || 0,
+                        }
+                    }));
+                });
             });
         }
 
@@ -186,6 +243,7 @@ const getMapHtml = () => `
                 if (d.type === 'UPDATE_LOCATION') updateLocation(d.lat, d.lng, d.heading);
                 else if (d.type === 'TOGGLE_3D') toggle3D(d.enable);
                 else if (d.type === 'CENTER') centerOnUser();
+                else if (d.type === 'ADD_TERRITORIES') addTerritories(d.territories);
             } catch(e) {}
         }
         initMap();
@@ -196,6 +254,7 @@ const getMapHtml = () => `
 
 export default function HomeScreen({ navigation }) {
     const { user } = useAuth();
+    const { isTracking } = useTracking();
     const [location, setLocation] = useState(null);
     const [mapReady, setMapReady] = useState(false);
     const [publicSession, setPublicSession] = useState(true);
@@ -205,20 +264,53 @@ export default function HomeScreen({ navigation }) {
     const watchRef = useRef(null);
 
     const [stats, setStats] = useState({ steps: 0, streak: 0, energy: 75 });
+    const [territories, setTerritories] = useState([]);
+    const [selectedTerritory, setSelectedTerritory] = useState(null);
 
+    // Fetch stats from server
     useEffect(() => {
         (async () => {
             try {
                 const res = await api.get('/users/profile');
                 const s = res.data.user?.stats || {};
                 setStats({
-                    steps: s.totalCaptures ? s.totalCaptures * 1200 : 0,
+                    steps: s.steps || (s.totalCaptures ? s.totalCaptures * 1200 : 0),
                     streak: s.streak || 0,
-                    energy: s.healthScore || 75,
+                    energy: s.energy || s.healthScore || 75,
                 });
             } catch (e) { }
         })();
     }, []);
+
+    // Fetch territories from server
+    const loadTerritories = useCallback(async () => {
+        try {
+            const res = await api.get('/territories');
+            const terrs = (res.data.territories || []).map(t => ({
+                ...t,
+                isMine: true,
+                ownerName: user?.username || 'You',
+                captureDistance: t.capture?.distance || 0,
+                captureDuration: t.capture?.duration || 0,
+                captureAvgSpeed: t.capture?.avgSpeed || 0,
+            }));
+            setTerritories(terrs);
+        } catch (e) { }
+    }, [user]);
+
+    useEffect(() => {
+        loadTerritories();
+    }, [loadTerritories]);
+
+    // Send territories to map when ready
+    useEffect(() => {
+        if (mapReady && webViewRef.current && territories.length > 0) {
+            webViewRef.current.postMessage(JSON.stringify({
+                type: 'ADD_TERRITORIES',
+                territories: territories,
+            }));
+        }
+    }, [mapReady, territories]);
 
     useEffect(() => {
         (async () => {
@@ -273,6 +365,25 @@ export default function HomeScreen({ navigation }) {
         }
     };
 
+    const formatDate = (dateStr) => {
+        if (!dateStr) return '--';
+        const d = new Date(dateStr);
+        return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    };
+
+    const formatTime = (dateStr) => {
+        if (!dateStr) return '--';
+        const d = new Date(dateStr);
+        return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    };
+
+    const formatDuration = (seconds) => {
+        if (!seconds) return '--';
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m}m ${s}s`;
+    };
+
     if (!location) {
         return (
             <View style={styles.loadingContainer}>
@@ -305,6 +416,9 @@ export default function HomeScreen({ navigation }) {
                         const data = JSON.parse(event.nativeEvent.data);
                         if (data.type === 'MAP_READY') setMapReady(true);
                         else if (data.type === '3D_CHANGED') setIs3D(data.is3D);
+                        else if (data.type === 'TERRITORY_TAP') {
+                            setSelectedTerritory(data.territory);
+                        }
                     } catch (e) { }
                 }}
             />
@@ -392,7 +506,7 @@ export default function HomeScreen({ navigation }) {
                     </View>
                     <TouchableOpacity
                         style={styles.startButton}
-                        onPress={() => navigation.navigate('StartCapture')}
+                        onPress={() => navigation.navigate('StartCapture', { isPublic: publicSession })}
                         activeOpacity={0.85}
                     >
                         <Text style={styles.startButtonText}>START</Text>
@@ -400,6 +514,86 @@ export default function HomeScreen({ navigation }) {
                     </TouchableOpacity>
                 </View>
             </View>
+
+            {/* Active Session Indicator */}
+            {isTracking && (
+                <TouchableOpacity
+                    style={styles.activeSessionBtn}
+                    onPress={() => navigation.navigate('LiveTracking')}
+                    activeOpacity={0.9}
+                >
+                    <View style={styles.pulseDot} />
+                    <Text style={styles.activeSessionText}>Return to Capture</Text>
+                    <MaterialCommunityIcons name="chevron-right" size={20} color="#fff" />
+                </TouchableOpacity>
+            )}
+
+            {/* Territory Popup Modal */}
+            <Modal
+                visible={!!selectedTerritory}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setSelectedTerritory(null)}
+            >
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setSelectedTerritory(null)}
+                >
+                    <View style={styles.popupCard}>
+                        <View style={styles.popupHeader}>
+                            <MaterialCommunityIcons name="vector-polygon" size={22} color="#5B63D3" />
+                            <Text style={styles.popupTitle}>{selectedTerritory?.name || 'Territory'}</Text>
+                            <TouchableOpacity onPress={() => setSelectedTerritory(null)}>
+                                <Ionicons name="close" size={22} color="#888" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.popupDivider} />
+
+                        <View style={styles.popupRow}>
+                            <Ionicons name="calendar-outline" size={16} color="#7C83ED" />
+                            <Text style={styles.popupLabel}>Date</Text>
+                            <Text style={styles.popupValue}>{formatDate(selectedTerritory?.capturedAt)}</Text>
+                        </View>
+                        <View style={styles.popupRow}>
+                            <Ionicons name="time-outline" size={16} color="#7C83ED" />
+                            <Text style={styles.popupLabel}>Time</Text>
+                            <Text style={styles.popupValue}>{formatTime(selectedTerritory?.capturedAt)}</Text>
+                        </View>
+                        <View style={styles.popupRow}>
+                            <MaterialCommunityIcons name="vector-square" size={16} color="#2dd06e" />
+                            <Text style={styles.popupLabel}>Area</Text>
+                            <Text style={styles.popupValue}>{(selectedTerritory?.area || 0).toFixed(1)} m²</Text>
+                        </View>
+                        <View style={styles.popupRow}>
+                            <MaterialCommunityIcons name="map-marker-distance" size={16} color="#E88D3F" />
+                            <Text style={styles.popupLabel}>Distance</Text>
+                            <Text style={styles.popupValue}>{((selectedTerritory?.distance || 0) / 1000).toFixed(2)} km</Text>
+                        </View>
+                        <View style={styles.popupRow}>
+                            <MaterialCommunityIcons name="timer-outline" size={16} color="#7C83ED" />
+                            <Text style={styles.popupLabel}>Duration</Text>
+                            <Text style={styles.popupValue}>{formatDuration(selectedTerritory?.duration)}</Text>
+                        </View>
+                        <View style={styles.popupRow}>
+                            <MaterialCommunityIcons name="speedometer" size={16} color="#E8A838" />
+                            <Text style={styles.popupLabel}>Avg Speed</Text>
+                            <Text style={styles.popupValue}>{(selectedTerritory?.avgSpeed || 0).toFixed(1)} km/h</Text>
+                        </View>
+                        <View style={styles.popupRow}>
+                            <MaterialCommunityIcons name="account-outline" size={16} color="#7C83ED" />
+                            <Text style={styles.popupLabel}>Owner</Text>
+                            <Text style={styles.popupValue}>{selectedTerritory?.owner || 'You'}</Text>
+                        </View>
+                        <View style={styles.popupRow}>
+                            <MaterialCommunityIcons name="gamepad-variant-outline" size={16} color="#7C83ED" />
+                            <Text style={styles.popupLabel}>Mode</Text>
+                            <Text style={[styles.popupValue, { textTransform: 'capitalize' }]}>{selectedTerritory?.gameMode || 'solo'}</Text>
+                        </View>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
         </View>
     );
 }
@@ -446,8 +640,7 @@ const styles = StyleSheet.create({
         height: 4, backgroundColor: '#5B63D3', borderRadius: 2,
     },
     rightControls: {
-        position: 'absolute', right: 16, top: 100,
-        gap: 10,
+        position: 'absolute', right: 16, top: 100, gap: 10,
     },
     mapCtrlBtn: {
         width: 44, height: 44, borderRadius: 22,
@@ -481,5 +674,47 @@ const styles = StyleSheet.create({
     },
     startButtonText: {
         color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 1,
+    },
+    // Territory Popup Modal
+    modalOverlay: {
+        flex: 1, backgroundColor: 'rgba(0,0,0,0.6)',
+        justifyContent: 'center', alignItems: 'center', padding: 24,
+    },
+    popupCard: {
+        backgroundColor: '#151929', borderRadius: 20, padding: 20, width: '100%',
+        borderWidth: 1, borderColor: 'rgba(91,99,211,0.25)',
+    },
+    popupHeader: {
+        flexDirection: 'row', alignItems: 'center', gap: 10,
+    },
+    popupTitle: {
+        flex: 1, fontSize: 18, fontWeight: '700', color: '#fff',
+    },
+    popupDivider: {
+        height: 1, backgroundColor: 'rgba(91,99,211,0.15)', marginVertical: 14,
+    },
+    popupRow: {
+        flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7,
+    },
+    popupLabel: {
+        flex: 1, fontSize: 14, color: '#888daf', fontWeight: '500',
+    },
+    popupValue: {
+        fontSize: 14, fontWeight: '700', color: '#fff',
+    },
+    activeSessionBtn: {
+        position: 'absolute', top: 50, alignSelf: 'center',
+        backgroundColor: 'rgba(232, 65, 24, 0.9)',
+        paddingHorizontal: 20, paddingVertical: 10, borderRadius: 25,
+        flexDirection: 'row', alignItems: 'center', gap: 8,
+        elevation: 5, shadowColor: '#e84118', shadowOpacity: 0.4, shadowRadius: 8,
+        borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
+        zIndex: 999,
+    },
+    activeSessionText: {
+        color: '#fff', fontWeight: '700', fontSize: 13,
+    },
+    pulseDot: {
+        width: 8, height: 8, borderRadius: 4, backgroundColor: '#fff',
     },
 });

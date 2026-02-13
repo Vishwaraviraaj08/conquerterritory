@@ -9,8 +9,10 @@ import {
     StatusBar,
     Alert,
     ActivityIndicator,
+    Image,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, FontAwesome } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../context/AuthContext';
 
 export default function AuthScreen({ navigation }) {
@@ -24,6 +26,29 @@ export default function AuthScreen({ navigation }) {
     const [isLogin, setIsLogin] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
+    const [profileImage, setProfileImage] = useState(null);
+
+    const pickImage = async () => {
+        try {
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'],
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.5,
+                base64: true,
+            });
+            if (!result.canceled && result.assets[0]) {
+                const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
+                if (base64.length > 1024 * 1024) {
+                    setErrorMsg('Image too large. Please choose a smaller image.');
+                    return;
+                }
+                setProfileImage(base64);
+            }
+        } catch (e) {
+            console.log('Image pick error:', e.message);
+        }
+    };
 
     const handleSubmit = async () => {
         setErrorMsg('');
@@ -44,6 +69,7 @@ export default function AuthScreen({ navigation }) {
                 await register(email.trim(), password, username.trim(), {
                     agreePrivacy,
                     agreeLocation,
+                    profileImage,
                 });
             }
         } catch (err) {
@@ -139,13 +165,18 @@ export default function AuthScreen({ navigation }) {
                             />
                         </View>
 
-                        {/* Avatar */}
-                        <Text style={styles.avatarLabel}>Choose Your Avatar</Text>
-                        <View style={styles.avatarContainer}>
-                            <View style={styles.avatarCircle}>
-                                <Ionicons name="person" size={40} color="#7C83ED" />
-                            </View>
-                        </View>
+                        {/* Avatar / Profile Image */}
+                        <Text style={styles.avatarLabel}>Profile Image</Text>
+                        <TouchableOpacity style={styles.avatarContainer} onPress={pickImage} activeOpacity={0.8}>
+                            {profileImage ? (
+                                <Image source={{ uri: profileImage }} style={styles.avatarImage} />
+                            ) : (
+                                <View style={styles.avatarCircle}>
+                                    <Ionicons name="camera-outline" size={32} color="#7C83ED" />
+                                    <Text style={{ color: '#888', fontSize: 10, marginTop: 4 }}>Tap to upload</Text>
+                                </View>
+                            )}
+                        </TouchableOpacity>
 
                         {/* Team Selection */}
                         <Text style={styles.teamLabel}>Team Selection</Text>
@@ -274,6 +305,10 @@ const styles = StyleSheet.create({
         textAlign: 'center', marginTop: 10, marginBottom: 10,
     },
     avatarContainer: { alignItems: 'center', marginBottom: 16 },
+    avatarImage: {
+        width: 80, height: 80, borderRadius: 40,
+        borderWidth: 2, borderColor: '#5B63D3',
+    },
     avatarCircle: {
         width: 80, height: 80, borderRadius: 40,
         backgroundColor: 'rgba(124, 131, 237, 0.15)',

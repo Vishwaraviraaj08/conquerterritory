@@ -7,9 +7,11 @@ import {
     ScrollView,
     StatusBar,
     ActivityIndicator,
+    Image,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../context/AuthContext';
 import api from '../api';
 
@@ -26,6 +28,37 @@ export default function ProfileScreen() {
     const { user, logout } = useAuth();
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [uploadingImage, setUploadingImage] = useState(false);
+
+    const pickImage = async () => {
+        try {
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'],
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.5,
+                base64: true,
+            });
+            if (!result.canceled && result.assets[0]) {
+                const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
+                if (base64.length > 1024 * 1024) {
+                    console.log('Image too large');
+                    return;
+                }
+                setUploadingImage(true);
+                try {
+                    const res = await api.put('/users/profile', { profileImage: base64 });
+                    setProfile(res.data.user);
+                } catch (e) {
+                    console.log('Profile image upload error:', e.message);
+                } finally {
+                    setUploadingImage(false);
+                }
+            }
+        } catch (e) {
+            console.log('Image pick error:', e.message);
+        }
+    };
 
     const fetchProfile = useCallback(async () => {
         try {
@@ -82,12 +115,23 @@ export default function ProfileScreen() {
 
                 {/* Avatar & Username */}
                 <View style={styles.profileSection}>
-                    <View style={styles.avatarOuter}>
-                        <View style={styles.avatarCircle}>
-                            <Ionicons name="person" size={44} color="#7C83ED" />
-                        </View>
+                    <TouchableOpacity style={styles.avatarOuter} onPress={pickImage} activeOpacity={0.8}>
+                        {uploadingImage ? (
+                            <View style={styles.avatarCircle}>
+                                <ActivityIndicator size="small" color="#5B63D3" />
+                            </View>
+                        ) : p.profileImage ? (
+                            <Image source={{ uri: p.profileImage }} style={styles.avatarImage} />
+                        ) : (
+                            <View style={styles.avatarCircle}>
+                                <Ionicons name="person" size={44} color="#7C83ED" />
+                            </View>
+                        )}
                         <View style={styles.onlineDot} />
-                    </View>
+                        <View style={styles.cameraBadge}>
+                            <Ionicons name="camera" size={12} color="#fff" />
+                        </View>
+                    </TouchableOpacity>
                     <Text style={styles.username}>{p.username || 'Player'}</Text>
                     <Text style={styles.userTeam}>
                         {p.email || 'Adventurer'} • Level {Math.floor((stats.totalPoints || 0) / 100) + 1}
@@ -211,6 +255,16 @@ const styles = StyleSheet.create({
         width: 90, height: 90, borderRadius: 45,
         backgroundColor: 'rgba(91,99,211,0.15)', justifyContent: 'center', alignItems: 'center',
         borderWidth: 3, borderColor: '#5B63D3',
+    },
+    avatarImage: {
+        width: 90, height: 90, borderRadius: 45,
+        borderWidth: 3, borderColor: '#5B63D3',
+    },
+    cameraBadge: {
+        position: 'absolute', bottom: 0, right: -2,
+        width: 26, height: 26, borderRadius: 13,
+        backgroundColor: '#5B63D3', justifyContent: 'center', alignItems: 'center',
+        borderWidth: 2, borderColor: '#0a0e1a',
     },
     onlineDot: {
         width: 16, height: 16, borderRadius: 8, backgroundColor: '#2dd06e',

@@ -5,15 +5,17 @@ import {
     Text,
     TouchableOpacity,
     StatusBar,
-    Alert,
     Animated,
     Easing,
     ActivityIndicator,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
+import { Magnetometer } from 'expo-sensors';
 import * as turf from '@turf/turf';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import CustomAlert from '../components/CustomAlert';
+import { useTracking } from '../context/TrackingContext';
 
 const TOMTOM_API_KEY = 'AoGGy9rY3zDH74BIUOIvpreylbkzKSAA';
 
@@ -26,145 +28,110 @@ const getTrackingMapHtml = () => `
     <link rel='stylesheet' type='text/css' href='https://api.tomtom.com/maps-sdk-for-web/cdn/6.x/6.25.0/maps/maps.css'>
     <script src="https://api.tomtom.com/maps-sdk-for-web/cdn/6.x/6.25.0/maps/maps-web.min.js"></script>
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #e8ecf1; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0a0e1a; }
         #map { width: 100%; height: 100%; }
         .mapboxgl-ctrl-logo { display: none !important; }
         .tt-logo { display: none !important; }
+        @keyframes pulse {
+            0% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
+            50% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+        }
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 6px rgba(0,200,255,0.5); }
+            50% { box-shadow: 0 0 16px rgba(0,200,255,0.8); }
+        }
+        .user-marker { width: 48px; height: 48px; position: relative; }
+        .marker-pulse {
+            position: absolute; width: 48px; height: 48px; border-radius: 50%;
+            background: radial-gradient(circle, rgba(0,200,255,0.35) 0%, transparent 70%);
+            left: 50%; top: 50%; animation: pulse 2.5s ease-out infinite;
+        }
+        .marker-ring {
+            position: absolute; width: 30px; height: 30px; border-radius: 50%;
+            border: 2px solid rgba(0,200,255,0.5); background: rgba(0,200,255,0.08);
+            left: 50%; top: 50%; transform: translate(-50%, -50%);
+        }
+        .marker-dot {
+            position: absolute; width: 14px; height: 14px; border-radius: 50%;
+            background: radial-gradient(circle at 35% 35%, #00e5ff, #0088cc);
+            border: 2.5px solid #fff; left: 50%; top: 50%; transform: translate(-50%, -50%);
+            z-index: 2; animation: glow 2s ease-in-out infinite;
+        }
+        .marker-arrow {
+            position: absolute; left: 50%; top: 0px; transform: translateX(-50%);
+            width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent;
+            border-bottom: 12px solid #00c8ff; filter: drop-shadow(0 0 3px rgba(0,200,255,0.6));
+            z-index: 3; transition: transform 0.3s ease;
+        }
     </style>
 </head>
 <body>
     <div id="map"></div>
     <script>
-        window.onerror = function(msg, src, line, col, err) {
-            if (window.ReactNativeWebView) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({
-                    type: 'ERROR', message: 'JS: ' + msg + ' (line ' + line + ')'
-                }));
-            }
-        };
-
-        var map, userMarker, mapReady = false;
-
+        var map, userMarker;
         function initMap() {
             try {
-                if (!window.tt) {
-                    setTimeout(initMap, 500);
-                    return;
-                }
+                if (!window.tt) { setTimeout(initMap, 500); return; }
                 tt.setProductInfo('GeoConquest', '1.0.0');
                 map = tt.map({
-                    key: '${TOMTOM_API_KEY}',
-                    container: 'map',
+                    key: '${TOMTOM_API_KEY}', container: 'map',
                     style: 'https://api.tomtom.com/map/1/style/20.0.0-8/basic_main.json',
-                    center: [0, 0],
-                    zoom: 16,
-                    pitch: 0,
-                    bearing: 0,
-                    dragRotate: true,
-                    touchPitch: true
+                    center: [0, 0], zoom: 17, margin: 50
                 });
-
                 map.on('load', function() {
-                    map.addSource('route', {
-                        type: 'geojson',
-                        data: { type: 'FeatureCollection', features: [] }
-                    });
-                    map.addSource('territory', {
-                        type: 'geojson',
-                        data: { type: 'FeatureCollection', features: [] }
-                    });
-
-                    map.addLayer({
-                        id: 'territory-fill', type: 'fill', source: 'territory',
-                        paint: { 'fill-color': 'rgba(91, 99, 211, 0.15)' }
-                    });
-                    map.addLayer({
-                        id: 'territory-border', type: 'line', source: 'territory',
-                        paint: { 'line-color': '#5B63D3', 'line-width': 2, 'line-dasharray': [3, 2] }
-                    });
-
-                    map.addLayer({
-                        id: 'route-glow', type: 'line', source: 'route',
-                        layout: { 'line-cap': 'round', 'line-join': 'round' },
-                        paint: { 'line-color': 'rgba(229, 57, 53, 0.15)', 'line-width': 18 }
-                    });
-                    map.addLayer({
-                        id: 'route-shadow', type: 'line', source: 'route',
-                        layout: { 'line-cap': 'round', 'line-join': 'round' },
-                        paint: { 'line-color': 'rgba(229, 57, 53, 0.3)', 'line-width': 10 }
-                    });
-                    map.addLayer({
-                        id: 'route-line', type: 'line', source: 'route',
-                        layout: { 'line-cap': 'round', 'line-join': 'round' },
-                        paint: { 'line-color': '#E53935', 'line-width': 5 }
-                    });
-
                     var el = document.createElement('div');
-                    el.style.width = '32px';
-                    el.style.height = '32px';
-                    el.style.borderRadius = '50%';
-                    el.style.border = '3px solid #5B63D3';
-                    el.style.boxShadow = '0 0 16px rgba(91,99,211,0.6)';
-                    el.style.background = 'radial-gradient(circle, #7C83ED, #5B63D3)';
-                    el.innerHTML = '<div style="width:10px;height:10px;background:#2dd06e;border-radius:50%;position:absolute;bottom:-2px;right:-2px;border:2px solid #fff;"></div>';
-                    el.style.position = 'relative';
-                    userMarker = new tt.Marker({ element: el }).setLngLat([0, 0]).addTo(map);
-
-                    mapReady = true;
+                    el.className = 'user-marker';
+                    el.innerHTML = '<div class="marker-pulse"></div><div class="marker-ring"></div><div class="marker-dot"></div><div class="marker-arrow" id="heading-arrow"></div>';
+                    userMarker = new tt.Marker({ element: el, anchor: 'center' }).setLngLat([0, 0]).addTo(map);
                     window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'MAP_READY' }));
                 });
-            } catch (e) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ERROR', message: e.toString() }));
-            }
+            } catch (e) {}
         }
-
-        function updateLocation(lat, lng) {
-            if (!map || !mapReady) return;
-            userMarker.setLngLat([lng, lat]);
-            map.easeTo({ center: [lng, lat], zoom: 17, duration: 600 });
-        }
-
-        function updatePath(coords) {
-            if (!map || !mapReady || !map.getSource('route')) return;
-            var geoJson = {
-                type: 'FeatureCollection',
-                features: [{
-                    type: 'Feature',
-                    geometry: { type: 'LineString', coordinates: coords }
-                }]
-            };
-            map.getSource('route').setData(geoJson);
-
-            if (coords.length >= 3) {
-                var closedCoords = coords.concat([coords[0]]);
-                var territoryGeoJson = {
-                    type: 'FeatureCollection',
-                    features: [{
-                        type: 'Feature',
-                        geometry: { type: 'Polygon', coordinates: [closedCoords] }
-                    }]
-                };
-                map.getSource('territory').setData(territoryGeoJson);
-            }
-        }
-
-        function centerOnUser(lat, lng) {
+        function updateLocation(lat, lng, heading) {
             if (!map) return;
-            map.flyTo({ center: [lng, lat], zoom: 17, duration: 1000 });
+            userMarker.setLngLat([lng, lat]);
+            var arrow = document.getElementById('heading-arrow');
+            if (arrow && heading !== null && heading !== undefined) {
+                arrow.style.transform = 'translateX(-50%) rotate(' + heading + 'deg)';
+            }
+            map.easeTo({ center: [lng, lat], zoom: 17, bearing: heading || 0, duration: 400, pitch: 50 });
         }
-
+        function updatePath(coords) {
+            if (!map || !coords || coords.length < 2) return;
+            try {
+                if (map.getSource('track-line')) {
+                    map.getSource('track-line').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords } });
+                } else {
+                    map.addSource('track-line', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: coords } } });
+                    map.addLayer({ id: 'track-line-bg', type: 'line', source: 'track-line', paint: { 'line-color': 'rgba(91,99,211,0.3)', 'line-width': 8 } });
+                    map.addLayer({ id: 'track-line-main', type: 'line', source: 'track-line', paint: { 'line-color': '#5B63D3', 'line-width': 4, 'line-dasharray': [2, 1] } });
+                }
+            } catch(e) {}
+        }
+        function showArea(coords) {
+            if (!map || !coords || coords.length < 3) return;
+            try {
+                var closed = coords.slice(); closed.push(coords[0]);
+                if (map.getSource('area-fill')) {
+                    map.getSource('area-fill').setData({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [closed] } });
+                } else {
+                    map.addSource('area-fill', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'Polygon', coordinates: [closed] } } });
+                    map.addLayer({ id: 'area-fill-layer', type: 'fill', source: 'area-fill', paint: { 'fill-color': 'rgba(91,99,211,0.2)', 'fill-outline-color': '#5B63D3' } });
+                    map.addLayer({ id: 'area-line-layer', type: 'line', source: 'area-fill', paint: { 'line-color': '#7C83ED', 'line-width': 2 } });
+                }
+            } catch(e) {}
+        }
         document.addEventListener('message', function(e) { handleMsg(e.data); });
         window.addEventListener('message', function(e) { handleMsg(e.data); });
-
         function handleMsg(str) {
             try {
                 var d = JSON.parse(str);
-                if (d.type === 'UPDATE_LOCATION') updateLocation(d.lat, d.lng);
-                else if (d.type === 'UPDATE_PATH') updatePath(d.coords);
-                else if (d.type === 'CENTER') centerOnUser(d.lat, d.lng);
+                if (d.type === 'UPDATE_LOCATION') updateLocation(d.lat, d.lng, d.heading);
+                else if (d.type === 'UPDATE_PATH') updatePath(d.coordinates);
+                else if (d.type === 'SHOW_AREA') showArea(d.coordinates);
             } catch(e) {}
         }
-
         initMap();
     </script>
 </body>
@@ -172,30 +139,76 @@ const getTrackingMapHtml = () => `
 `;
 
 export default function LiveTrackingScreen({ navigation, route }) {
+    const { isTracking, isPaused, elapsedTime, distance, currentSpeed, avgSpeed, maxSpeed, area, path, sessionData, startSession, pauseSession, resumeSession, stopSession, cancelSession } = useTracking();
+    const routeParams = route.params || {};
+
     const [mapReady, setMapReady] = useState(false);
-    const [elapsedTime, setElapsedTime] = useState(0);
-    const [speed, setSpeed] = useState(0);
-    const [distance, setDistance] = useState(0);
-    const [headingDeg, setHeadingDeg] = useState(0);
-    const [headingLabel, setHeadingLabel] = useState('N');
-    const [maxSpeedVal, setMaxSpeedVal] = useState(0);
-    const [initialLocation, setInitialLocation] = useState(null);
+    const [showFinishAlert, setShowFinishAlert] = useState(false);
+    const [showCancelAlert, setShowCancelAlert] = useState(false);
+    const [heading, setHeading] = useState(0);
 
-    const compassAnim = useRef(new Animated.Value(0)).current;
     const webViewRef = useRef(null);
-    const pathRef = useRef([]);
-    const subscription = useRef(null);
-    const timerRef = useRef(null);
-    const startTimeRef = useRef(Date.now());
-    const mapReadyRef = useRef(false);
-    const maxSpeedRef = useRef(0);
-    const distanceRef = useRef(0);
+    const pulseAnim = useRef(new Animated.Value(1)).current;
 
-    const getHeadingLabel = (deg) => {
-        if (deg === null || deg === undefined || deg < 0) return 'N';
-        const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-        return dirs[Math.round(deg / 45) % 8];
-    };
+    // Compass
+    useEffect(() => {
+        let sub;
+        (async () => {
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') return;
+            Magnetometer.setUpdateInterval(100);
+            sub = Magnetometer.addListener(data => {
+                let { x, y } = data;
+                let angle = Math.atan2(y, x) * (180 / Math.PI);
+                angle = (angle + 90) >= 0 ? angle + 90 : angle + 450;
+                setHeading(Math.floor(angle));
+            });
+        })();
+        return () => { if (sub) sub.remove(); };
+    }, []);
+
+    // Start Session on Mount if not already tracking or if params provided
+    useEffect(() => {
+        if (!isTracking && (routeParams.gameMode || routeParams.teamId)) {
+            startSession({
+                gameMode: routeParams.gameMode || 'solo',
+                isPublic: routeParams.isPublic ?? true,
+                teamId: routeParams.teamId,
+                partnerIds: routeParams.partnerIds
+            });
+        }
+    }, []);
+
+    // Initial Path Load - for when returning to screen
+    useEffect(() => {
+        if (mapReady && webViewRef.current && path.length > 0) {
+            webViewRef.current.postMessage(JSON.stringify({ type: 'UPDATE_PATH', coordinates: path }));
+            const last = path[path.length - 1];
+            webViewRef.current.postMessage(JSON.stringify({ type: 'UPDATE_LOCATION', lat: last[1], lng: last[0], heading: heading }));
+        }
+    }, [mapReady]);
+
+    // Update Map Realtime
+    useEffect(() => {
+        if (mapReady && webViewRef.current && path.length > 0) {
+            const last = path[path.length - 1];
+            webViewRef.current.postMessage(JSON.stringify({ type: 'UPDATE_LOCATION', lat: last[1], lng: last[0], heading: heading }));
+            webViewRef.current.postMessage(JSON.stringify({ type: 'UPDATE_PATH', coordinates: path }));
+            if (area > 0) {
+                webViewRef.current.postMessage(JSON.stringify({ type: 'SHOW_AREA', coordinates: path }));
+            }
+        }
+    }, [path.length, heading, mapReady]);
+
+    // Pulse Animation
+    useEffect(() => {
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(pulseAnim, { toValue: 1.3, duration: 800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+                Animated.timing(pulseAnim, { toValue: 1, duration: 800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+            ])
+        ).start();
+    }, []);
 
     const formatTime = (seconds) => {
         const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
@@ -204,329 +217,242 @@ export default function LiveTrackingScreen({ navigation, route }) {
         return `${h}:${m}:${s}`;
     };
 
-    const getPace = () => {
-        const d = distanceRef.current;
-        if (d <= 0 || elapsedTime <= 0) return '--:--';
-        const paceMinPerKm = (elapsedTime / 60) / (d / 1000);
-        if (!isFinite(paceMinPerKm) || paceMinPerKm > 99) return '--:--';
-        const min = Math.floor(paceMinPerKm);
-        const sec = Math.floor((paceMinPerKm - min) * 60).toString().padStart(2, '0');
-        return `${min}:${sec}`;
+    const handleCancel = () => {
+        cancelSession();
+        navigation.goBack();
     };
 
-    const animateCompass = (toDeg) => {
-        Animated.timing(compassAnim, {
-            toValue: toDeg,
-            duration: 400,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-        }).start();
-    };
+    const confirmFinish = () => {
+        const stats = stopSession(); // Stop and get final stats
 
-    useEffect(() => {
-        startTimeRef.current = Date.now();
-        timerRef.current = setInterval(() => {
-            setElapsedTime(Math.floor((Date.now() - startTimeRef.current) / 1000));
-        }, 1000);
+        const totalSeconds = stats.elapsedTime || 1;
+        const distM = stats.distance;
+        const paceVal = distM > 0 ? (totalSeconds / 60) / (distM / 1000) : 0;
+        const paceMin = Math.floor(paceVal);
+        const paceSec = Math.round((paceVal - paceMin) * 60);
 
-        getInitialLocation();
+        const weightKg = 70;
+        const met = stats.avgSpeed > 10 ? 8.0 : stats.avgSpeed > 6 ? 6.0 : 3.5;
+        const caloriesEst = Math.round(met * weightKg * (totalSeconds / 3600));
+        const areaPoints = Math.round(stats.area * 0.1 + distM * 0.5 + totalSeconds * 0.2);
 
-        return () => {
-            if (timerRef.current) clearInterval(timerRef.current);
-            if (subscription.current) {
-                subscription.current.remove();
-                subscription.current = null;
-            }
-        };
-    }, []);
+        const pathCoords = stats.path;
+        const endCoord = pathCoords.length > 0 ? pathCoords[pathCoords.length - 1] : [0, 0];
+        const hasClosedLoop = area > 0; // Or check distance to start < 20m
 
-    const getInitialLocation = async () => {
-        try {
-            const loc = await Location.getCurrentPositionAsync({
-                accuracy: Location.Accuracy.High
-            });
-            setInitialLocation(loc.coords);
-        } catch (e) { }
-    };
-
-    useEffect(() => {
-        if (mapReady && initialLocation) {
-            sendToMap('UPDATE_LOCATION', {
-                lat: initialLocation.latitude,
-                lng: initialLocation.longitude,
-            });
-            startTracking();
-        }
-    }, [mapReady, initialLocation]);
-
-    const sendToMap = (type, data) => {
-        if (webViewRef.current) {
-            webViewRef.current.postMessage(JSON.stringify({ type, ...data }));
-        }
-    };
-
-    const startTracking = async () => {
-        subscription.current = await Location.watchPositionAsync(
-            {
-                accuracy: Location.Accuracy.BestForNavigation,
-                timeInterval: 800,
-                distanceInterval: 2,
-            },
-            (newLoc) => {
-                const { latitude, longitude, speed: spd, accuracy, heading: hdg } = newLoc.coords;
-
-                const currentSpeed = (spd !== null && spd !== undefined && spd >= 0) ? spd * 3.6 : 0;
-                setSpeed(currentSpeed);
-
-                if (currentSpeed > maxSpeedRef.current) {
-                    maxSpeedRef.current = currentSpeed;
-                    setMaxSpeedVal(currentSpeed);
-                }
-
-                if (hdg !== null && hdg !== undefined && hdg >= 0) {
-                    setHeadingDeg(hdg);
-                    setHeadingLabel(getHeadingLabel(hdg));
-                    animateCompass(hdg);
-                }
-
-                sendToMap('UPDATE_LOCATION', { lat: latitude, lng: longitude });
-
-                let shouldAdd = true;
-                if (accuracy && accuracy > 30) shouldAdd = false;
-
-                if (shouldAdd && pathRef.current.length > 0) {
-                    const last = pathRef.current[pathRef.current.length - 1];
-                    const from = turf.point([last[0], last[1]]);
-                    const to = turf.point([longitude, latitude]);
-                    const dist = turf.distance(from, to, { units: 'meters' });
-                    if (dist < 3) shouldAdd = false;
-                }
-
-                if (shouldAdd) {
-                    pathRef.current.push([longitude, latitude]);
-
-                    if (pathRef.current.length > 1) {
-                        const line = turf.lineString(pathRef.current);
-                        const totalDist = turf.length(line, { units: 'meters' });
-                        distanceRef.current = totalDist;
-                        setDistance(totalDist);
-                    }
-
-                    sendToMap('UPDATE_PATH', { coords: pathRef.current });
-                }
-            }
-        );
-    };
-
-    const handleFinish = () => {
-        if (subscription.current) {
-            subscription.current.remove();
-            subscription.current = null;
-        }
-        if (timerRef.current) clearInterval(timerRef.current);
-
-        const cp = pathRef.current;
-        let area = 0;
-        if (cp.length >= 3) {
-            const closedCoords = [...cp, cp[0]];
-            try {
-                const poly = turf.polygon([closedCoords]);
-                area = turf.area(poly);
-            } catch (e) { }
-        }
-
-        const d = distanceRef.current;
         navigation.replace('CaptureResults', {
-            area: area.toFixed(1),
-            distance: d.toFixed(0),
-            time: elapsedTime,
-            avgSpeed: d > 0 && elapsedTime > 0 ? ((d / 1000) / (elapsedTime / 3600)).toFixed(1) : '0',
-            maxSpeed: maxSpeedRef.current.toFixed(1),
-            pace: getPace(),
-            points: Math.floor(area * 0.068 + d * 0.1),
+            area: stats.area.toFixed(1),
+            distance: distM.toFixed(0),
+            time: totalSeconds,
+            avgSpeed: stats.avgSpeed.toFixed(1),
+            maxSpeed: stats.maxSpeed.toFixed(1),
+            pace: `${paceMin}:${paceSec.toString().padStart(2, '0')}`,
+            points: areaPoints,
+            calories: caloriesEst,
+            path: { type: 'LineString', coordinates: pathCoords },
+            startLocation: stats.startLocation || { type: 'Point', coordinates: [0, 0] },
+            endLocation: { type: 'Point', coordinates: endCoord },
+            gameMode: sessionData?.gameMode || 'solo',
+            isPublic: sessionData?.isPublic ?? true,
+            isCapture: hasClosedLoop, // If loop not closed, it's just an activity
+            capturedAt: new Date().toISOString(),
         });
     };
 
-    const handleCancel = () => {
-        Alert.alert('Cancel Capture', 'Are you sure you want to cancel?', [
-            { text: 'No', style: 'cancel' },
-            {
-                text: 'Yes', style: 'destructive', onPress: () => {
-                    if (subscription.current) { subscription.current.remove(); subscription.current = null; }
-                    if (timerRef.current) clearInterval(timerRef.current);
-                    navigation.goBack();
-                }
-            }
-        ]);
-    };
+    const onFinishPress = () => {
+        const startPoint = path.length > 0 ? turf.point(path[0]) : null;
+        const currentPoint = path.length > 0 ? turf.point(path[path.length - 1]) : null;
+        let distanceToStart = 0;
+        if (startPoint && currentPoint) {
+            distanceToStart = turf.distance(startPoint, currentPoint, { units: 'meters' });
+        }
 
-    const compassRotation = compassAnim.interpolate({
-        inputRange: [0, 360],
-        outputRange: ['0deg', '360deg'],
-    });
+        let message = `Great job! You've covered ${(distance / 1000).toFixed(2)} km.`;
+        let title = "Finish Activity";
+
+        if (distanceToStart > 30) {
+            title = "Incomplete Loop";
+            message = `You are ${distanceToStart.toFixed(0)}m away from the start. If you finish now, this will be saved as a Run/Walk but NOT a territory capture. Continue?`;
+        } else if (area > 0) {
+            title = "Capture Territory";
+            message = `Excellent! You've enclosed ${area.toFixed(0)} m². Ready to claim this territory?`;
+        }
+
+        setShowFinishAlert({ title, message });
+    };
 
     return (
         <View style={styles.container}>
-            <StatusBar barStyle="dark-content" />
-
-            {/* Stats row 1 */}
-            <View style={styles.statsTop}>
-                <View style={[styles.statCard, { backgroundColor: 'rgba(91,99,211,0.12)' }]}>
-                    <Text style={styles.statSmallLabel}>Speed</Text>
-                    <View style={styles.statMainRow}>
-                        <MaterialCommunityIcons name="speedometer" size={16} color="#5B63D3" />
-                        <Text style={styles.statBigValue}>{speed.toFixed(1)}</Text>
-                        <Text style={styles.statUnit}>km/h</Text>
+            <StatusBar barStyle="light-content" />
+            <WebView
+                ref={webViewRef}
+                originWhitelist={['*']}
+                source={{ html: getTrackingMapHtml() }}
+                style={styles.map}
+                javaScriptEnabled={true}
+                domStorageEnabled={true}
+                androidLayerType="hardware"
+                startInLoadingState={true}
+                renderLoading={() => (
+                    <View style={styles.loadingOverlay}>
+                        <ActivityIndicator size="large" color="#5B63D3" />
                     </View>
+                )}
+                onMessage={(event) => {
+                    try {
+                        const data = JSON.parse(event.nativeEvent.data);
+                        if (data.type === 'MAP_READY') setMapReady(true);
+                    } catch (e) { }
+                }}
+            />
+
+            {/* Premium Header - Floating Timer */}
+            <View style={styles.headerFloating}>
+                <View style={styles.timerBadge}>
+                    <Animated.View style={[styles.liveDot, { transform: [{ scale: pulseAnim }] }]} />
+                    <Text style={styles.timerText}>{formatTime(elapsedTime)}</Text>
                 </View>
-
-                {/* Animated Compass */}
-                <Animated.View style={[styles.compassCircle, { transform: [{ rotate: compassRotation }] }]}>
-                    <MaterialCommunityIcons name="navigation" size={20} color="#5B63D3" />
-                </Animated.View>
-
-                <View style={[styles.statCard, { backgroundColor: 'rgba(91,99,211,0.12)' }]}>
-                    <Text style={styles.statSmallLabel}>Time</Text>
-                    <View style={styles.statMainRow}>
-                        <Ionicons name="time-outline" size={16} color="#5B63D3" />
-                        <Text style={styles.statBigValue}>{formatTime(elapsedTime)}</Text>
+                {sessionData?.teamId && (
+                    <View style={[styles.timerBadge, { marginTop: 8, backgroundColor: 'rgba(91,99,211,0.9)' }]}>
+                        <MaterialCommunityIcons name="account-group" size={16} color="#fff" style={{ marginRight: 6 }} />
+                        <Text style={[styles.timerText, { fontSize: 14 }]}>TEAM: {sessionData.teamId}</Text>
                     </View>
-                </View>
+                )}
             </View>
 
-            {/* Compass direction label */}
-            <View style={styles.compassLabelWrap}>
-                <Text style={styles.compassLabelText}>{headingLabel}</Text>
-            </View>
-
-            {/* Stats row 2 */}
-            <View style={styles.statsSecond}>
-                <View style={[styles.statCard, { backgroundColor: 'rgba(91,99,211,0.12)' }]}>
-                    <Text style={styles.statSmallLabel}>Pace</Text>
-                    <View style={styles.statMainRow}>
-                        <MaterialCommunityIcons name="shoe-print" size={16} color="#5B63D3" />
-                        <Text style={styles.statBigValue}>{getPace()}</Text>
-                        <Text style={styles.statUnit}>/km</Text>
-                    </View>
-                </View>
-
-                <View style={[styles.statCard, { backgroundColor: 'rgba(91,99,211,0.12)' }]}>
-                    <Text style={styles.statSmallLabel}>Distance</Text>
-                    <View style={styles.statMainRow}>
-                        <Ionicons name="location-outline" size={16} color="#5B63D3" />
-                        <Text style={styles.statBigValue}>
-                            {distance >= 1000
-                                ? (distance / 1000).toFixed(2)
-                                : Math.round(distance)}
-                        </Text>
-                        <Text style={styles.statUnit}>{distance >= 1000 ? 'km' : 'm'}</Text>
-                    </View>
-                </View>
-            </View>
-
-            {/* Map */}
-            <View style={styles.mapContainer}>
-                <WebView
-                    ref={webViewRef}
-                    originWhitelist={['*']}
-                    source={{ html: getTrackingMapHtml() }}
-                    style={styles.map}
-                    javaScriptEnabled={true}
-                    domStorageEnabled={true}
-                    androidLayerType="hardware"
-                    startInLoadingState={true}
-                    renderLoading={() => (
-                        <View style={styles.mapLoading}>
-                            <ActivityIndicator size="large" color="#5B63D3" />
-                            <Text style={styles.mapLoadingText}>Loading Map...</Text>
+            {/* Bottom Card UI */}
+            <View style={styles.bottomCardContainer}>
+                {/* Stats Row */}
+                <View style={styles.statsCard}>
+                    <View style={styles.statBox}>
+                        <Text style={styles.statLabel}>DISTANCE</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                            <Text style={styles.statValue}>{(distance / 1000).toFixed(2)}</Text>
+                            <Text style={styles.statUnit}> km</Text>
                         </View>
-                    )}
-                    onMessage={(event) => {
-                        try {
-                            const data = JSON.parse(event.nativeEvent.data);
-                            if (data.type === 'MAP_READY') {
-                                mapReadyRef.current = true;
-                                setMapReady(true);
-                            }
-                        } catch (e) { }
-                    }}
-                />
+                    </View>
+                    <View style={styles.vertDivider} />
+                    <View style={styles.statBox}>
+                        <Text style={styles.statLabel}>AREA</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                            <Text style={styles.statValue}>{area.toFixed(0)}</Text>
+                            <Text style={styles.statUnit}> m²</Text>
+                        </View>
+                    </View>
+                    <View style={styles.vertDivider} />
+                    <View style={styles.statBox}>
+                        <Text style={styles.statLabel}>SPEED</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                            <Text style={styles.statValue}>{currentSpeed.toFixed(1)}</Text>
+                            <Text style={styles.statUnit}> km/h</Text>
+                        </View>
+                    </View>
+                </View>
+
+                {/* Controls */}
+                <View style={styles.controlRow}>
+                    <TouchableOpacity
+                        style={[styles.controlBtn, styles.cancelBtn]}
+                        onPress={() => setShowCancelAlert(true)}
+                        activeOpacity={0.8}
+                    >
+                        <MaterialCommunityIcons name="close" size={32} color="#fff" />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[styles.controlBtn, isPaused ? styles.resumeBtn : styles.pauseBtn]}
+                        onPress={isPaused ? resumeSession : pauseSession}
+                        activeOpacity={0.8}
+                    >
+                        <Ionicons name={isPaused ? 'play' : 'pause'} size={32} color="#fff" />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={styles.finishBtnMain}
+                        onPress={onFinishPress}
+                        activeOpacity={0.85}
+                    >
+                        <Text style={styles.finishBtnText}>FINISH</Text>
+                        <MaterialCommunityIcons name="flag-checkered" size={20} color="#000" />
+                    </TouchableOpacity>
+                </View>
             </View>
 
-            {/* Bottom warning */}
-            <View style={styles.warningContainer}>
-                <Ionicons name="warning-outline" size={18} color="#E8A838" />
-                <Text style={styles.warningText}>You are vulnerable—capture not closed!</Text>
-            </View>
+            <CustomAlert
+                visible={!!showFinishAlert}
+                type="confirm"
+                title={showFinishAlert?.title || "Finish Activity"}
+                message={showFinishAlert?.message || "Are you sure?"}
+                buttons={[
+                    { text: 'Resume', style: 'cancel', onPress: () => setShowFinishAlert(false) },
+                    { text: 'Finish', onPress: confirmFinish },
+                ]}
+                onClose={() => setShowFinishAlert(false)}
+            />
 
-            {/* Bottom buttons */}
-            <View style={styles.bottomActions}>
-                <TouchableOpacity style={styles.cancelBtn} onPress={handleCancel} activeOpacity={0.85}>
-                    <Ionicons name="close-circle-outline" size={20} color="#E53935" />
-                    <Text style={styles.cancelBtnText}>Cancel/Abort</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.finishBtn} onPress={handleFinish} activeOpacity={0.85}>
-                    <Ionicons name="checkmark-circle-outline" size={20} color="#5B63D3" />
-                    <Text style={styles.finishBtnText}>Finish/Close Loop</Text>
-                </TouchableOpacity>
-            </View>
+            <CustomAlert
+                visible={showCancelAlert}
+                type="confirm"
+                title="Discard Activity?"
+                message="This will discard all progress for this session. Are you sure?"
+                buttons={[
+                    { text: 'Resume', style: 'cancel', onPress: () => setShowCancelAlert(false) },
+                    { text: 'Discard', style: 'destructive', onPress: handleCancel },
+                ]}
+                onClose={() => setShowCancelAlert(false)}
+            />
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#e8ecf1' },
-    statsTop: {
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        paddingHorizontal: 12, paddingTop: 50, gap: 8,
-    },
-    statsSecond: {
-        flexDirection: 'row', justifyContent: 'space-between',
-        paddingHorizontal: 12, paddingTop: 8, gap: 8,
-    },
-    statCard: {
-        flex: 1, borderRadius: 14, padding: 10,
-        borderWidth: 1, borderColor: 'rgba(91,99,211,0.15)',
-        backgroundColor: '#fff',
-    },
-    statSmallLabel: { color: '#666', fontSize: 11, fontWeight: '500', marginBottom: 2 },
-    statMainRow: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
-    statBigValue: { fontSize: 22, fontWeight: '800', color: '#1a1e2e' },
-    statUnit: { fontSize: 12, fontWeight: '500', color: '#777' },
-    compassCircle: {
-        width: 50, height: 50, borderRadius: 25,
-        backgroundColor: '#1a1e2e', justifyContent: 'center', alignItems: 'center',
-        borderWidth: 2, borderColor: '#5B63D3',
-    },
-    compassLabelWrap: { alignItems: 'center', marginTop: 2 },
-    compassLabelText: { fontSize: 11, fontWeight: '700', color: '#5B63D3' },
-    mapContainer: { flex: 1, marginTop: 8, borderRadius: 0, overflow: 'hidden' },
+    container: { flex: 1, backgroundColor: '#0a0e1a' },
     map: { flex: 1 },
-    mapLoading: {
-        ...StyleSheet.absoluteFillObject,
-        justifyContent: 'center', alignItems: 'center', backgroundColor: '#e8ecf1',
+    loadingOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0e1a' },
+
+    headerFloating: {
+        position: 'absolute', top: 50, alignSelf: 'center', alignItems: 'center',
     },
-    mapLoadingText: { marginTop: 8, fontSize: 13, color: '#888', fontWeight: '500' },
-    warningContainer: {
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-        paddingVertical: 12, gap: 8, backgroundColor: '#fff',
+    timerBadge: {
+        flexDirection: 'row', alignItems: 'center', gap: 10,
+        backgroundColor: 'rgba(15, 20, 35, 0.95)', borderRadius: 30, paddingHorizontal: 20, paddingVertical: 10,
+        borderWidth: 1, borderColor: 'rgba(91,99,211,0.3)',
+        shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6,
     },
-    warningText: { color: '#555', fontSize: 13, fontWeight: '500' },
-    bottomActions: {
-        flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 34,
-        paddingTop: 12, gap: 12, backgroundColor: '#fff',
+    liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#ff4444' },
+    timerText: { fontSize: 24, fontWeight: '800', color: '#fff', fontVariant: ['tabular-nums'], letterSpacing: 1 },
+
+    bottomCardContainer: {
+        position: 'absolute', bottom: 30, left: 16, right: 16,
     },
-    cancelBtn: {
-        flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-        gap: 6, borderWidth: 1.5, borderColor: '#E53935', borderRadius: 14,
-        paddingVertical: 14, backgroundColor: 'rgba(229,57,53,0.05)',
+    statsCard: {
+        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+        backgroundColor: 'rgba(15, 20, 35, 0.95)', borderRadius: 20, padding: 20,
+        marginBottom: 16,
+        borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+        shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
     },
-    cancelBtnText: { color: '#E53935', fontSize: 14, fontWeight: '700' },
-    finishBtn: {
-        flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-        gap: 6, borderWidth: 1.5, borderColor: '#5B63D3', borderRadius: 14,
-        paddingVertical: 14, backgroundColor: 'rgba(91,99,211,0.05)',
+    statBox: { alignItems: 'center', flex: 1 },
+    statLabel: { fontSize: 11, fontWeight: '700', color: '#888daf', marginBottom: 4, letterSpacing: 0.5 },
+    statValue: { fontSize: 22, fontWeight: '800', color: '#fff' },
+    statUnit: { fontSize: 14, color: '#666', fontWeight: '500' },
+    vertDivider: { width: 1, height: 30, backgroundColor: 'rgba(255,255,255,0.1)' },
+
+    controlRow: {
+        flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 16,
     },
-    finishBtnText: { color: '#5B63D3', fontSize: 14, fontWeight: '700' },
+    controlBtn: {
+        width: 64, height: 64, borderRadius: 32,
+        justifyContent: 'center', alignItems: 'center',
+        shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6,
+    },
+    pauseBtn: { backgroundColor: '#2a2e40', borderWidth: 1, borderColor: '#444' },
+    resumeBtn: { backgroundColor: '#2dd06e' },
+    cancelBtn: { backgroundColor: '#e84118', marginRight: 0 },
+    finishBtnMain: {
+        flex: 1, height: 64, borderRadius: 32,
+        backgroundColor: '#fff', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
+        shadowColor: '#fff', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.2, shadowRadius: 15, elevation: 6,
+    },
+    finishBtnText: { color: '#000', fontSize: 18, fontWeight: '900', letterSpacing: 1 },
 });

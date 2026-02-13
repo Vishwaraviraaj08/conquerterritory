@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Alert, Dimensions, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
+import CustomAlert from './CustomAlert';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import * as turf from '@turf/turf';
@@ -283,6 +284,7 @@ export default function MapScreen() {
   const [stats, setStats] = useState({ area: 0, distance: 0, perimeter: 0 });
   const [is3DMode, setIs3DMode] = useState(false);
   const [mapReady, setMapReady] = useState(false);
+  const [alertConfig, setAlertConfig] = useState({ visible: false, type: 'info', title: '', message: '' });
 
   const webViewRef = useRef(null);
   const pathRef = useRef([]);
@@ -293,7 +295,7 @@ export default function MapScreen() {
     (async () => {
       const hasPermission = await requestLocationPermissions();
       if (!hasPermission) {
-        Alert.alert('Permission needed', 'Please enable location permissions.');
+        setAlertConfig({ visible: true, type: 'warning', title: 'Permission Needed', message: 'Please enable location permissions to use the map.' });
         return;
       }
       const loc = await Location.getCurrentPositionAsync({});
@@ -410,7 +412,7 @@ export default function MapScreen() {
   const calculateFinalStats = () => {
     const cp = pathRef.current;
     if (cp.length < 3) {
-      Alert.alert('Info', 'Path too short for area calculation.');
+      setAlertConfig({ visible: true, type: 'info', title: 'Path Too Short', message: 'Walk a longer path to calculate area.' });
       return;
     }
     // Close the polygon
@@ -508,6 +510,14 @@ export default function MapScreen() {
         tracking={tracking}
         onStart={startTracking}
         onStop={stopTracking}
+      />
+
+      <CustomAlert
+        visible={alertConfig.visible}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        onClose={() => setAlertConfig(a => ({ ...a, visible: false }))}
       />
     </View>
   );
