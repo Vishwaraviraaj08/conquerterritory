@@ -84,6 +84,7 @@ export default function CaptureResultsScreen({ navigation, route }) {
                 endLocation: endLocation || { type: 'Point', coordinates: [0, 0] },
                 gameMode, isPublic,
                 capturedAt: capturedAt || new Date().toISOString(),
+                sessionId: route.params?.sessionId || null
             });
             setSaved(true);
             setAlertConfig({

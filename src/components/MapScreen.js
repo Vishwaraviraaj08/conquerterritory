@@ -19,7 +19,7 @@ const MAP_HTML = `
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>TomTom Map</title>
+    <title>Geo Conquest Map</title>
     <link rel='stylesheet' type='text/css' href='https://api.tomtom.com/maps-sdk-for-web/cdn/6.x/6.25.0/maps/maps.css'>
     <script src="https://api.tomtom.com/maps-sdk-for-web/cdn/6.x/6.25.0/maps/maps-web.min.js"></script>
     <style>
@@ -49,7 +49,7 @@ const MAP_HTML = `
                     throw new Error('TomTom SDK not loaded');
                 }
 
-                tt.setProductInfo('TomTomTracker', '1.0.0');
+                tt.setProductInfo('Geo Conquest', '1.0.0');
 
                 map = tt.map({
                     key: '${TOMTOM_API_KEY}',

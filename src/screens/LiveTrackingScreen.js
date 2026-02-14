@@ -16,6 +16,7 @@ import * as turf from '@turf/turf';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import CustomAlert from '../components/CustomAlert';
 import { useTracking } from '../context/TrackingContext';
+import api from '../api';
 
 const TOMTOM_API_KEY = 'AoGGy9rY3zDH74BIUOIvpreylbkzKSAA';
 
@@ -70,6 +71,8 @@ const getTrackingMapHtml = () => `
     <div id="map"></div>
     <script>
         var map, userMarker;
+        var participantMarkers = {}; // Store other players' markers
+
         function initMap() {
             try {
                 if (!window.tt) { setTimeout(initMap, 500); return; }
@@ -97,6 +100,40 @@ const getTrackingMapHtml = () => `
             }
             map.easeTo({ center: [lng, lat], zoom: 17, bearing: heading || 0, duration: 400, pitch: 50 });
         }
+
+        function updateParticipants(users) {
+            if (!map) return;
+            // users: [{ userId, latitude, longitude, username, profileImage }]
+            
+            // Remove markers for users no longer in list
+            Object.keys(participantMarkers).forEach(function(id) {
+                if (!users.find(function(u) { return u.userId === id; })) {
+                    participantMarkers[id].remove();
+                    delete participantMarkers[id];
+                }
+            });
+
+            // Add or update markers
+            users.forEach(function(u) {
+                if (!u.latitude || !u.longitude) return;
+                
+                if (participantMarkers[u.userId]) {
+                    // Update
+                    participantMarkers[u.userId].setLngLat([u.longitude, u.latitude]);
+                } else {
+                    // Create
+                    var el = document.createElement('div');
+                    el.style.cssText = 'width: 32px; height: 32px; border-radius: 50%; border: 2px solid #E8A838; background: url(' + (u.profileImage || 'https://via.placeholder.com/32') + ') no-repeat center/cover; box-shadow: 0 0 5px rgba(0,0,0,0.5);';
+                    
+                    var marker = new tt.Marker({ element: el, anchor: 'center' })
+                        .setLngLat([u.longitude, u.latitude])
+                        .addTo(map);
+                    
+                    participantMarkers[u.userId] = marker;
+                }
+            });
+        }
+
         function updatePath(coords) {
             if (!map || !coords || coords.length < 2) return;
             try {
@@ -122,6 +159,62 @@ const getTrackingMapHtml = () => `
                 }
             } catch(e) {}
         }
+        function updateTerritories(list) {
+            if (!map) return;
+            var features = list.map(function(t) {
+                return {
+                    type: 'Feature',
+                    geometry: t.geometry,
+                    properties: {
+                        id: t._id,
+                        name: t.name,
+                        teamName: t.teamName,
+                        ownerName: t.ownerId ? t.ownerId.username : 'Unknown',
+                        area: t.stats ? t.stats.area : 0,
+                        gameMode: t.gameMode
+                    }
+                };
+            });
+
+            try {
+                if (map.getSource('territories')) {
+                    map.getSource('territories').setData({ type: 'FeatureCollection', features: features });
+                } else {
+                    map.addSource('territories', { type: 'geojson', data: { type: 'FeatureCollection', features: features } });
+                    map.addLayer({
+                        id: 'territories-fill',
+                        type: 'fill',
+                        source: 'territories',
+                        paint: {
+                            'fill-color': [
+                                'match',
+                                ['get', 'gameMode'],
+                                'solo', '#4CAF50',
+                                'team', '#FF5722',
+                                'co-op', '#2196F3',
+                                '#888888'
+                            ],
+                            'fill-opacity': 0.4,
+                            'fill-outline-color': '#ffffff'
+                        }
+                    });
+                    
+                    // Click handler
+                    map.on('click', 'territories-fill', function(e) {
+                        var props = e.features[0].properties;
+                        window.ReactNativeWebView.postMessage(JSON.stringify({
+                            type: 'TERRITORY_CLICK',
+                            territory: props
+                        }));
+                    });
+                    
+                    // Cursor pointer
+                    map.on('mouseenter', 'territories-fill', function() { map.getCanvas().style.cursor = 'pointer'; });
+                    map.on('mouseleave', 'territories-fill', function() { map.getCanvas().style.cursor = ''; });
+                }
+            } catch(e) {}
+        }
+
         document.addEventListener('message', function(e) { handleMsg(e.data); });
         window.addEventListener('message', function(e) { handleMsg(e.data); });
         function handleMsg(str) {
@@ -130,6 +223,8 @@ const getTrackingMapHtml = () => `
                 if (d.type === 'UPDATE_LOCATION') updateLocation(d.lat, d.lng, d.heading);
                 else if (d.type === 'UPDATE_PATH') updatePath(d.coordinates);
                 else if (d.type === 'SHOW_AREA') showArea(d.coordinates);
+                else if (d.type === 'UPDATE_PARTICIPANTS') updateParticipants(d.participants);
+                else if (d.type === 'UPDATE_TERRITORIES') updateTerritories(d.territories);
             } catch(e) {}
         }
         initMap();
@@ -200,6 +295,13 @@ export default function LiveTrackingScreen({ navigation, route }) {
         }
     }, [path.length, heading, mapReady]);
 
+    // Team State
+    const { sessionId, isHost, initialParticipants } = routeParams;
+    const [participants, setParticipants] = useState(initialParticipants || []);
+    const [isTeamMode, setIsTeamMode] = useState(!!sessionId);
+
+    // Initial API load - N/A with static import
+
     // Pulse Animation
     useEffect(() => {
         Animated.loop(
@@ -209,6 +311,66 @@ export default function LiveTrackingScreen({ navigation, route }) {
             ])
         ).start();
     }, []);
+
+    // Team Polling & Broadcasting
+    useEffect(() => {
+        let pollInterval;
+        let broadcastInterval;
+
+        if (isTeamMode && api && isTracking && !isPaused) {
+            // Poll for other players
+            pollInterval = setInterval(async () => {
+                try {
+                    const res = await api.get(`/capture-sessions/${sessionId}`);
+                    const session = res.data.session;
+
+                    if (session.status === 'completed') {
+                        alert('Session ended by host!');
+                        stopSession();
+                        navigation.goBack(); // Or go to results if we can parse them?
+                        return;
+                    }
+
+                    // Filter out self
+                    const others = session.participants.filter(p => p.userId !== sessionData?.userId); // Need self ID?
+                    // Actually, let's just send all, and map keeps self separate
+
+                    if (webViewRef.current) {
+                        // Send all participants to map (excluding self handled in map or just distinct ID)
+                        // Current user has 'userMarker', others have 'participantMarkers'
+                        // We should exclude self from 'others' list sent to map
+                        // But we don't know our own DB ID here easily unless we fetch it or use context
+                        // For now, let's just send valid lat/lon ones
+                        const validOthers = session.participants.filter(p => p.latitude && p.longitude);
+                        webViewRef.current.postMessage(JSON.stringify({
+                            type: 'UPDATE_PARTICIPANTS',
+                            participants: validOthers
+                        }));
+                    }
+                } catch (e) {
+                    console.log('Poll error:', e);
+                }
+            }, 3000);
+
+            // Broadcast own location
+            broadcastInterval = setInterval(async () => {
+                if (path.length > 0) {
+                    const last = path[path.length - 1];
+                    try {
+                        await api.post(`/capture-sessions/${sessionId}/location`, {
+                            latitude: last[1],
+                            longitude: last[0]
+                        });
+                    } catch (e) { console.log('Broadcast error'); }
+                }
+            }, 3000);
+        }
+
+        return () => {
+            clearInterval(pollInterval);
+            clearInterval(broadcastInterval);
+        };
+    }, [isTeamMode, api, sessionId, isTracking, isPaused, path]);
 
     const formatTime = (seconds) => {
         const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
@@ -222,8 +384,27 @@ export default function LiveTrackingScreen({ navigation, route }) {
         navigation.goBack();
     };
 
-    const confirmFinish = () => {
+    const confirmFinish = async () => {
         const stats = stopSession(); // Stop and get final stats
+
+        if (isTeamMode && isHost) {
+            try {
+                await api.post(`/capture-sessions/${sessionId}/complete`, {
+                    area: stats.area,
+                    distance: distM,
+                    path: stats.path,
+                    center: stats.path && stats.path.length > 0 ? stats.path[0] : null,
+                    stats: {
+                        time: totalSeconds,
+                        avgSpeed: stats.avgSpeed
+                    },
+                    teamName: sessionData?.teamId ? `Team ${sessionData.teamId}` : undefined
+                });
+            } catch (e) {
+                console.log('Failed to complete session on server', e);
+                // Continue anyway to save local result?
+            }
+        }
 
         const totalSeconds = stats.elapsedTime || 1;
         const distM = stats.distance;
@@ -256,6 +437,7 @@ export default function LiveTrackingScreen({ navigation, route }) {
             isPublic: sessionData?.isPublic ?? true,
             isCapture: hasClosedLoop, // If loop not closed, it's just an activity
             capturedAt: new Date().toISOString(),
+            sessionId: sessionId || null
         });
     };
 
@@ -281,6 +463,32 @@ export default function LiveTrackingScreen({ navigation, route }) {
         setShowFinishAlert({ title, message });
     };
 
+    const [selectedTerritory, setSelectedTerritory] = useState(null);
+
+    // Fetch Territories
+    useEffect(() => {
+        let interval;
+        const fetchTerrs = async () => {
+            if (!mapReady || !api || path.length === 0) return;
+            try {
+                const last = path[path.length - 1];
+                const res = await api.get(`/territories/nearby?lat=${last[1]}&lng=${last[0]}&radius=5000`);
+                if (webViewRef.current) {
+                    webViewRef.current.postMessage(JSON.stringify({
+                        type: 'UPDATE_TERRITORIES',
+                        territories: res.data.territories
+                    }));
+                }
+            } catch (e) { console.log('Territory fetch error', e); }
+        };
+
+        if (mapReady && api) {
+            fetchTerrs();
+            interval = setInterval(fetchTerrs, 15000); // Poll every 15s
+        }
+        return () => clearInterval(interval);
+    }, [mapReady, api, path.length === 0]); // Re-start when path becomes available
+
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
@@ -302,6 +510,9 @@ export default function LiveTrackingScreen({ navigation, route }) {
                     try {
                         const data = JSON.parse(event.nativeEvent.data);
                         if (data.type === 'MAP_READY') setMapReady(true);
+                        if (data.type === 'TERRITORY_CLICK') {
+                            setSelectedTerritory(data.territory);
+                        }
                     } catch (e) { }
                 }}
             />
@@ -367,14 +578,20 @@ export default function LiveTrackingScreen({ navigation, route }) {
                         <Ionicons name={isPaused ? 'play' : 'pause'} size={32} color="#fff" />
                     </TouchableOpacity>
 
-                    <TouchableOpacity
-                        style={styles.finishBtnMain}
-                        onPress={onFinishPress}
-                        activeOpacity={0.85}
-                    >
-                        <Text style={styles.finishBtnText}>FINISH</Text>
-                        <MaterialCommunityIcons name="flag-checkered" size={20} color="#000" />
-                    </TouchableOpacity>
+                    {(!isTeamMode || isHost) ? (
+                        <TouchableOpacity
+                            style={styles.finishBtnMain}
+                            onPress={onFinishPress}
+                            activeOpacity={0.85}
+                        >
+                            <Text style={styles.finishBtnText}>FINISH</Text>
+                            <MaterialCommunityIcons name="flag-checkered" size={20} color="#000" />
+                        </TouchableOpacity>
+                    ) : (
+                        <View style={[styles.finishBtnMain, { backgroundColor: '#333' }]}>
+                            <Text style={[styles.finishBtnText, { color: '#888', fontSize: 14 }]}>WAITING FOR HOST</Text>
+                        </View>
+                    )}
                 </View>
             </View>
 
@@ -400,6 +617,22 @@ export default function LiveTrackingScreen({ navigation, route }) {
                     { text: 'Discard', style: 'destructive', onPress: handleCancel },
                 ]}
                 onClose={() => setShowCancelAlert(false)}
+            />
+
+            <CustomAlert
+                visible={!!selectedTerritory}
+                type="info"
+                title={selectedTerritory?.name || "Territory Info"}
+                message={selectedTerritory ?
+                    `Owner: ${selectedTerritory.ownerName}\n` +
+                    `Team: ${selectedTerritory.teamName || 'None'}\n` +
+                    `Area: ${selectedTerritory.area} m²\n` +
+                    `Mode: ${selectedTerritory.gameMode}`
+                    : ""}
+                buttons={[
+                    { text: 'Close', onPress: () => setSelectedTerritory(null) }
+                ]}
+                onClose={() => setSelectedTerritory(null)}
             />
         </View>
     );

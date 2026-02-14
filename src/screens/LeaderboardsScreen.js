@@ -10,6 +10,7 @@ import {
     ActivityIndicator,
     Modal,
     Image,
+    TextInput,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useScrollToTop } from '@react-navigation/native';
@@ -58,6 +59,105 @@ const LeaderItem = ({ item, onPress }) => (
     </TouchableOpacity>
 );
 
+// Search Modal Component
+const SearchModal = ({ visible, onClose, onUserPress }) => {
+    const [query, setQuery] = useState('');
+    const [results, setResults] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const { user } = useAuth(); // Assuming useAuth is available or passed down
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (query.length >= 2) handleSearch();
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [query]);
+
+    const handleSearch = async () => {
+        setLoading(true);
+        try {
+            const res = await api.get('/users/search', { params: { q: query } });
+            setResults(res.data.users);
+        } catch (e) {
+            console.log('Search error:', e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleAddFriend = async (friendId) => {
+        try {
+            await api.post('/friends/request', { friendId });
+            alert('Friend request sent!');
+        } catch (e) {
+            alert(e.response?.data?.error || 'Failed to send request');
+        }
+    };
+
+    return (
+        <Modal visible={visible} animationType="slide" transparent>
+            <View style={styles.modalOverlay}>
+                <View style={styles.modalContent}>
+                    <View style={styles.modalHeader}>
+                        <Text style={styles.modalTitle}>Find Players</Text>
+                        <TouchableOpacity onPress={onClose}>
+                            <Ionicons name="close" size={24} color="#fff" />
+                        </TouchableOpacity>
+                    </View>
+
+                    <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search username..."
+                        placeholderTextColor="#666"
+                        value={query}
+                        onChangeText={setQuery}
+                        autoFocus
+                    />
+
+                    {loading && <ActivityIndicator size="small" color="#5B63D3" style={{ marginVertical: 10 }} />}
+
+                    <FlatList
+                        data={results}
+                        keyExtractor={item => item._id}
+                        renderItem={({ item }) => (
+                            <TouchableOpacity style={styles.leaderCard} onPress={() => onUserPress(item)}>
+                                <View style={styles.avatarSmall}>
+                                    {item.profileImage ? (
+                                        <Image source={{ uri: item.profileImage }} style={{ width: 36, height: 36, borderRadius: 18 }} />
+                                    ) : (
+                                        <Ionicons name="person" size={20} color="#7C83ED" />
+                                    )}
+                                </View>
+                                <View style={styles.leaderInfo}>
+                                    <Text style={styles.leaderName}>{item.username}</Text>
+                                    <Text style={styles.leaderTeam}>{item.friendsCount || 0} friends</Text>
+                                </View>
+                                <View style={styles.leaderStats}>
+                                    <View style={styles.leaderStatItem}>
+                                        <MaterialCommunityIcons name="star" size={14} color="#E8A838" />
+                                        <Text style={styles.leaderStatValue}>{(item.totalPoints || 0).toLocaleString()} pts</Text>
+                                    </View>
+                                    {item._id !== user?._id && (
+                                        <TouchableOpacity
+                                            style={{ marginTop: 4, backgroundColor: '#5B63D3', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}
+                                            onPress={() => handleAddFriend(item._id)}
+                                        >
+                                            <Text style={{ fontSize: 10, color: '#fff', fontWeight: 'bold' }}>ADD</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            </TouchableOpacity>
+                        )}
+                        ListEmptyComponent={
+                            query.length >= 2 && !loading ? <Text style={styles.emptyText}>No users found</Text> : null
+                        }
+                    />
+                </View>
+            </View>
+        </Modal>
+    );
+};
+
 export default function LeaderboardsScreen() {
     const [activeScope, setActiveScope] = useState('Global');
     const [activePeriod, setActivePeriod] = useState('alltime');
@@ -68,6 +168,9 @@ export default function LeaderboardsScreen() {
     const [userRank, setUserRank] = useState(null);
     const [loading, setLoading] = useState(true);
 
+    // Search State
+    const [showSearchModal, setShowSearchModal] = useState(false);
+
     // User profile modal
     const [selectedUserId, setSelectedUserId] = useState(null);
     const [showProfileModal, setShowProfileModal] = useState(false);
@@ -76,6 +179,10 @@ export default function LeaderboardsScreen() {
     const [showRequestsModal, setShowRequestsModal] = useState(false);
     const { unreadCount } = useNotifications();
     const { user } = useAuth();
+
+    // ... existing listRef and fetchLeaderboard ...
+    // Note: Re-declaring refs and callbacks to ensure context is kept if I'm replacing the whole component body or significant parts.
+    // However, since I am replacing the whole export, I must include everything.
 
     const listRef = useRef(null);
     useScrollToTop(listRef);
@@ -106,8 +213,10 @@ export default function LeaderboardsScreen() {
     }, [fetchLeaderboard]);
 
     const handleUserPress = (item) => {
-        if (item.userId && user && item.userId !== user._id) {
-            setSelectedUserId(item.userId);
+        // Handle press from Leaderboard OR Search
+        const uid = item.userId || item._id; // Search returns _id, Leaderboard returns userId
+        if (uid && user && uid !== user._id) {
+            setSelectedUserId(uid);
             setShowProfileModal(true);
         }
     };
@@ -125,6 +234,10 @@ export default function LeaderboardsScreen() {
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Leaderboards</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <TouchableOpacity onPress={() => setShowSearchModal(true)} style={styles.iconBtn}>
+                        <Ionicons name="search" size={22} color="#fff" />
+                    </TouchableOpacity>
+
                     <TouchableOpacity
                         style={styles.requestIconBtn}
                         onPress={() => setShowRequestsModal(true)}
@@ -245,6 +358,15 @@ export default function LeaderboardsScreen() {
                 </TouchableOpacity>
             </Modal>
 
+            <SearchModal
+                visible={showSearchModal}
+                onClose={() => setShowSearchModal(false)}
+                onUserPress={(item) => {
+                    setShowSearchModal(false);
+                    handleUserPress(item);
+                }}
+            />
+
             {/* User Profile Modal */}
             <UserProfileModal
                 visible={showProfileModal}
@@ -354,4 +476,16 @@ const styles = StyleSheet.create({
     pickerOptionActive: { backgroundColor: 'rgba(91,99,211,0.12)' },
     pickerOptionText: { fontSize: 15, fontWeight: '600', color: '#ccc' },
     pickerOptionTextActive: { color: '#5B63D3' },
+
+    // Search Modal Styles
+    iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 20 },
+    modalContent: { backgroundColor: '#1A2035', borderRadius: 20, padding: 20, maxHeight: '80%' },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+    modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
+    searchInput: { backgroundColor: '#111528', borderRadius: 12, padding: 14, color: '#fff', borderWidth: 1, borderColor: '#333' },
+    searchItem: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderBottomWidth: 1, borderBottomColor: '#333' },
+    searchAvatar: { width: 40, height: 40, borderRadius: 20 },
+    searchName: { flex: 1, color: '#fff', fontWeight: 'bold' },
+    emptyText: { color: '#666', textAlign: 'center', marginTop: 20 },
 });

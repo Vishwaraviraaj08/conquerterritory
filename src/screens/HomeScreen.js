@@ -100,7 +100,7 @@ const getMapHtml = () => `
         function initMap() {
             try {
                 if (!window.tt) { setTimeout(initMap, 500); return; }
-                tt.setProductInfo('GeoConquest', '1.0.0');
+                tt.setProductInfo('GeoConquest', '1.0.1'); // Updated version
                 map = tt.map({
                     key: '${TOMTOM_API_KEY}',
                     container: 'map',
@@ -108,9 +108,17 @@ const getMapHtml = () => `
                     center: [0, 0],
                     zoom: 2,
                     pitch: 0, bearing: 0,
-                    dragRotate: true, touchPitch: true
+                    dragRotate: true, touchPitch: true,
+                    failIfMajorPerformanceCaveat: false 
                 });
+                
+                // Safety timeout: If 'load' doesn't fire in 8s, retry
+                var loadTimeout = setTimeout(function() {
+                     window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ERROR', message: 'Map Load Timeout' }));
+                }, 8000);
+
                 map.on('load', function() {
+                    clearTimeout(loadTimeout);
                     try {
                         var sources = map.getStyle().sources;
                         var sourceId = sources.vectorTiles ? 'vectorTiles' : sources.vector ? 'vector' : sources.composite ? 'composite' : null;
@@ -136,11 +144,81 @@ const getMapHtml = () => `
                         + '<div class="marker-arrow" id="heading-arrow"></div>';
                     userMarker = new tt.Marker({ element: el, anchor: 'center' }).setLngLat([0, 0]).addTo(map);
 
-                    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'MAP_READY' }));
+                    if (window.ReactNativeWebView) {
+                        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'MAP_READY' }));
+                    }
                 });
             } catch (e) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ERROR', message: e.toString() }));
+                if (window.ReactNativeWebView) {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ERROR', message: e.toString() }));
+                }
+                setTimeout(initMap, 2000); // Retry on error
             }
+        }
+
+        // --- Real-Time Multiplayer Rendering ---
+        var peerMarkers = {};
+        var peerLayers = [];
+
+        function updatePeers(peers) {
+            // peers: [{ userId, coordinates: [lng, lat], path: [[lng,lat],...], ... }]
+            if (!map) return;
+
+            var activeIds = new Set(peers.map(p => p.userId));
+
+            // Remove stale markers/layers
+            Object.keys(peerMarkers).forEach(id => {
+                if (!activeIds.has(id)) {
+                    peerMarkers[id].remove();
+                    delete peerMarkers[id];
+                    if (map.getLayer('peer-line-' + id)) map.removeLayer('peer-line-' + id);
+                    if (map.getSource('peer-source-' + id)) map.removeSource('peer-source-' + id);
+                }
+            });
+
+            peers.forEach(p => {
+                // Update or Create Marker
+                if (peerMarkers[p.userId]) {
+                    peerMarkers[p.userId].setLngLat(p.coordinates);
+                } else {
+                    var el = document.createElement('div');
+                    el.className = 'peer-marker';
+                    el.style.width = '30px'; el.style.height = '30px';
+                    el.style.borderRadius = '50%';
+                    el.style.backgroundColor = 'rgba(232, 168, 56, 0.9)'; // Orange for others
+                    el.style.border = '2px solid #fff';
+                    el.style.boxShadow = '0 0 10px rgba(232, 168, 56, 0.6)';
+                    
+                    peerMarkers[p.userId] = new tt.Marker({ element: el })
+                        .setLngLat(p.coordinates)
+                        .setPopup(new tt.Popup({ offset: 25 }).setText(p.username))
+                        .addTo(map);
+                }
+
+                // Update Path (LineString)
+                if (p.path && p.path.length > 1) {
+                    var srcId = 'peer-source-' + p.userId;
+                    if (map.getSource(srcId)) {
+                        map.getSource(srcId).setData({
+                            type: 'Feature', geometry: { type: 'LineString', coordinates: p.path }
+                        });
+                    } else {
+                        map.addSource(srcId, {
+                            type: 'geojson',
+                            data: { type: 'Feature', geometry: { type: 'LineString', coordinates: p.path } }
+                        });
+                        map.addLayer({
+                            id: 'peer-line-' + p.userId,
+                            type: 'line', source: srcId,
+                            paint: {
+                                'line-color': '#E8A838',
+                                'line-width': 4,
+                                'line-opacity': 0.6
+                            }
+                        });
+                    }
+                }
+            });
         }
 
         function updateLocation(lat, lng, heading) {
@@ -235,18 +313,36 @@ const getMapHtml = () => `
             });
         }
 
-        document.addEventListener('message', function(e) { handleMsg(e.data); });
-        window.addEventListener('message', function(e) { handleMsg(e.data); });
+        // Message Listener
+        document.addEventListener("message", function(event) {
+            handleMsg(event.data);
+        });
+        window.addEventListener("message", function(event) {
+            handleMsg(event.data);
+        });
+
         function handleMsg(str) {
             try {
                 var d = JSON.parse(str);
+                
+                // Debug log
+                if (d.type !== 'UPDATE_LOCATION') {
+                     // alert('MSG: ' + d.type); // Uncomment for extreme debugging
+                }
+
                 if (d.type === 'UPDATE_LOCATION') updateLocation(d.lat, d.lng, d.heading);
                 else if (d.type === 'TOGGLE_3D') toggle3D(d.enable);
                 else if (d.type === 'CENTER') centerOnUser();
+                else if (d.type === 'UPDATE_PEERS') updatePeers(d.peers);
                 else if (d.type === 'ADD_TERRITORIES') addTerritories(d.territories);
-            } catch(e) {}
+            } catch(e) {
+                // window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ERROR', message: 'Msg Parse Error: ' + e.message }));
+            }
         }
-        initMap();
+        
+        // Start Init
+        if (document.readyState === 'complete') initMap();
+        else window.addEventListener('load', initMap);
     </script>
 </body>
 </html>
@@ -256,6 +352,7 @@ export default function HomeScreen({ navigation }) {
     const { user } = useAuth();
     const { isTracking } = useTracking();
     const [location, setLocation] = useState(null);
+    const [webviewKey, setWebviewKey] = useState(0);
     const [mapReady, setMapReady] = useState(false);
     const [publicSession, setPublicSession] = useState(true);
     const [is3D, setIs3D] = useState(false);
@@ -301,6 +398,28 @@ export default function HomeScreen({ navigation }) {
     useEffect(() => {
         loadTerritories();
     }, [loadTerritories]);
+
+    // Poll for active sessions (Real-Time Multiplayer)
+    useEffect(() => {
+        let interval;
+        if (publicSession && mapReady) {
+            const fetchActiveSessions = async () => {
+                try {
+                    const res = await api.get('/tracking/active');
+                    if (res.data?.sessions && webViewRef.current) {
+                        webViewRef.current.postMessage(JSON.stringify({
+                            type: 'UPDATE_PEERS',
+                            peers: res.data.sessions
+                        }));
+                    }
+                } catch (e) { }
+            };
+
+            fetchActiveSessions(); // Initial fetch
+            interval = setInterval(fetchActiveSessions, 5000); // Poll every 5s
+        }
+        return () => clearInterval(interval);
+    }, [publicSession, mapReady]);
 
     // Send territories to map when ready
     useEffect(() => {
@@ -397,14 +516,17 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
             <WebView
+                key={webviewKey}
                 ref={webViewRef}
                 originWhitelist={['*']}
-                source={{ html: getMapHtml() }}
+                source={{ html: getMapHtml(), baseUrl: '' }} // Added baseUrl
                 style={styles.map}
                 javaScriptEnabled={true}
                 domStorageEnabled={true}
                 androidLayerType="hardware"
                 startInLoadingState={true}
+                mixedContentMode="always"
+                allowFileAccess={true}
                 renderLoading={() => (
                     <View style={styles.mapLoadingOverlay}>
                         <ActivityIndicator size="large" color="#5B63D3" />
@@ -414,7 +536,10 @@ export default function HomeScreen({ navigation }) {
                 onMessage={(event) => {
                     try {
                         const data = JSON.parse(event.nativeEvent.data);
-                        if (data.type === 'MAP_READY') setMapReady(true);
+                        if (data.type === 'MAP_READY') {
+                            setMapReady(true);
+                            console.log('Map Rendered');
+                        }
                         else if (data.type === '3D_CHANGED') setIs3D(data.is3D);
                         else if (data.type === 'TERRITORY_TAP') {
                             setSelectedTerritory(data.territory);
@@ -425,17 +550,17 @@ export default function HomeScreen({ navigation }) {
 
             {/* Top Header */}
             <View style={styles.topHeader}>
-                <View style={styles.logoSmall}>
+                {/* <View style={styles.logoSmall}>
                     <MaterialCommunityIcons name="book-open-page-variant" size={22} color="#fff" />
-                </View>
+                </View> */}
                 <View style={{ flex: 1 }} />
-                <TouchableOpacity
+                {/* <TouchableOpacity
                     style={styles.headerIcon}
                     onPress={() => navigation.navigate('Settings')}
                     activeOpacity={0.7}
                 >
                     <Ionicons name="notifications-outline" size={22} color="#fff" />
-                </TouchableOpacity>
+                </TouchableOpacity> */}
                 <TouchableOpacity
                     style={styles.headerIcon}
                     onPress={() => navigation.navigate('Settings')}
@@ -480,6 +605,15 @@ export default function HomeScreen({ navigation }) {
                 </TouchableOpacity>
                 <TouchableOpacity
                     style={styles.mapCtrlBtn}
+                    onPress={() => {
+                        setMapReady(false);
+                        setWebviewKey(prev => prev + 1); // Force reload
+                    }}
+                >
+                    <Ionicons name="refresh" size={20} color="#fff" />
+                </TouchableOpacity>
+                {/* <TouchableOpacity
+                    style={styles.mapCtrlBtn}
                     onPress={() => navigation.navigate('Territories')}
                 >
                     <MaterialCommunityIcons name="sword-cross" size={20} color="#fff" />
@@ -489,7 +623,7 @@ export default function HomeScreen({ navigation }) {
                     onPress={() => navigation.navigate('Profile')}
                 >
                     <Ionicons name="person-outline" size={20} color="#fff" />
-                </TouchableOpacity>
+                </TouchableOpacity> */}
             </View>
 
             {/* Bottom Controls */}

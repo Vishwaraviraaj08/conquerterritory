@@ -190,7 +190,7 @@ export default function TerritoryOverviewScreen({ navigation }) {
             {/* Header */}
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>My Territories</Text>
-                <TouchableOpacity onPress={fetchTerritories} activeOpacity={0.7}>
+                <TouchableOpacity onPress={() => { setLoading(true); fetchTerritories(); }} activeOpacity={0.7}>
                     <Ionicons name="refresh-outline" size={22} color="#fff" />
                 </TouchableOpacity>
             </View>

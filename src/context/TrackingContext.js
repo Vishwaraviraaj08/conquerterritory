@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
 import * as Location from 'expo-location';
 import * as turf from '@turf/turf';
+import api from '../api';
 
 const TrackingContext = createContext(null);
 
@@ -19,6 +20,7 @@ export function TrackingProvider({ children }) {
 
     const watchRef = useRef(null);
     const timerRef = useRef(null);
+    const updateIntervalRef = useRef(null); // For backend updates
     const speedsRef = useRef([]);
     const lastLocRef = useRef(null);
 
@@ -31,7 +33,30 @@ export function TrackingProvider({ children }) {
             if (timerRef.current) clearInterval(timerRef.current);
         }
         return () => { if (timerRef.current) clearInterval(timerRef.current); };
+        return () => { if (timerRef.current) clearInterval(timerRef.current); };
     }, [isTracking, isPaused]);
+
+    // Backend Update Loop
+    useEffect(() => {
+        if (isTracking && !isPaused && sessionData?.isPublic) {
+            updateIntervalRef.current = setInterval(async () => {
+                if (lastLocRef.current) {
+                    try {
+                        await api.post('/tracking/update', {
+                            coordinates: lastLocRef.current,
+                            path: path.length > 50 ? path.slice(-50) : path, // Optimize payload
+                            isActive: true,
+                            gameMode: sessionData.gameMode,
+                            teamId: sessionData.teamId,
+                        });
+                    } catch (e) { console.warn('Tracking update failed', e.message); }
+                }
+            }, 5000); // 5 seconds
+        } else {
+            if (updateIntervalRef.current) clearInterval(updateIntervalRef.current);
+        }
+        return () => { if (updateIntervalRef.current) clearInterval(updateIntervalRef.current); };
+    }, [isTracking, isPaused, sessionData, path]);
 
     const startSession = async (data) => {
         // Reset state
@@ -94,7 +119,7 @@ export function TrackingProvider({ children }) {
     const pauseSession = () => setIsPaused(true);
     const resumeSession = () => setIsPaused(false);
 
-    const stopSession = () => {
+    const stopSession = async () => {
         setIsTracking(false);
         setIsPaused(false);
         if (watchRef.current) {
@@ -102,6 +127,11 @@ export function TrackingProvider({ children }) {
             watchRef.current = null;
         }
         if (timerRef.current) clearInterval(timerRef.current);
+        if (updateIntervalRef.current) clearInterval(updateIntervalRef.current);
+
+        // Notify backend of stop
+        try { await api.post('/tracking/stop'); } catch (e) { }
+
         return {
             elapsedTime,
             distance,
@@ -114,7 +144,7 @@ export function TrackingProvider({ children }) {
         };
     };
 
-    const cancelSession = () => {
+    const cancelSession = async () => {
         setIsTracking(false);
         setIsPaused(false);
         if (watchRef.current) {
@@ -122,6 +152,11 @@ export function TrackingProvider({ children }) {
             watchRef.current = null;
         }
         if (timerRef.current) clearInterval(timerRef.current);
+        if (updateIntervalRef.current) clearInterval(updateIntervalRef.current);
+
+        // Notify backend of stop
+        try { await api.post('/tracking/stop'); } catch (e) { }
+
         // Reset all state
         setElapsedTime(0);
         setDistance(0);

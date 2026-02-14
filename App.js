@@ -11,6 +11,7 @@ import { TrackingProvider } from './src/context/TrackingContext';
 
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import AuthScreen from './src/screens/AuthScreen';
+import SplashScreen from './src/screens/SplashScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import StartCaptureScreen from './src/screens/StartCaptureScreen';
 import LiveTrackingScreen from './src/screens/LiveTrackingScreen';
@@ -20,6 +21,7 @@ import LeaderboardsScreen from './src/screens/LeaderboardsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import CommunityScreen from './src/screens/CommunityScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import TeamChatScreen from './src/screens/TeamChatScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -59,11 +61,12 @@ function MainTabs() {
 function AppNavigator() {
   const { isAuthenticated, loading } = useAuth();
 
-  if (loading) {
+  const [isSplashFinished, setSplashFinished] = React.useState(false);
+
+  // Show Splash if Auth is loading OR Splash animation hasn't finished
+  if (loading || !isSplashFinished) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0e1a' }}>
-        <ActivityIndicator size="large" color="#5B63D3" />
-      </View>
+      <SplashScreen onFinish={() => setSplashFinished(true)} />
     );
   }
 
@@ -81,6 +84,7 @@ function AppNavigator() {
           <Stack.Screen name="LiveTracking" component={LiveTrackingScreen} options={{ gestureEnabled: false }} />
           <Stack.Screen name="CaptureResults" component={CaptureResultsScreen} options={{ gestureEnabled: false }} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
+          <Stack.Screen name="TeamChat" component={TeamChatScreen} />
         </>
       )}
     </Stack.Navigator>
