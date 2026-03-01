@@ -44,19 +44,19 @@ const AnimatedEmptyState = () => {
 
     return (
         <View style={{ alignItems: 'center', marginVertical: 30 }}>
-            <Animated.View style={{ transform: [{ rotate: spin }] }}>
-                <Svg width={80} height={80} viewBox="0 0 100 100">
-                    <Defs>
-                        <LinearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
-                            <Stop offset="0" stopColor="#5B63D3" stopOpacity="1" />
-                            <Stop offset="1" stopColor="#7C83ED" stopOpacity="0.5" />
-                        </LinearGradient>
-                    </Defs>
-                    <Circle cx="50" cy="50" r="45" stroke="url(#grad)" strokeWidth="4" fill="none" strokeDasharray="20, 10" />
-                    <Circle cx="50" cy="50" r="30" fill="#1F243A" opacity="0.5" />
-                </Svg>
-            </Animated.View>
-            <View style={{ position: 'absolute', top: 25, left: 33 }}>
+            <View style={{ width: 80, height: 80, justifyContent: 'center', alignItems: 'center' }}>
+                <Animated.View style={{ position: 'absolute', transform: [{ rotate: spin }] }}>
+                    <Svg width={80} height={80} viewBox="0 0 100 100">
+                        <Defs>
+                            <LinearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+                                <Stop offset="0" stopColor="#5B63D3" stopOpacity="1" />
+                                <Stop offset="1" stopColor="#7C83ED" stopOpacity="0.5" />
+                            </LinearGradient>
+                        </Defs>
+                        <Circle cx="50" cy="50" r="45" stroke="url(#grad)" strokeWidth="4" fill="none" strokeDasharray="20, 10" />
+                        <Circle cx="50" cy="50" r="30" fill="#1F243A" opacity="0.5" />
+                    </Svg>
+                </Animated.View>
                 <Ionicons name="people" size={32} color="#fff" />
             </View>
             <Text style={{ color: '#888', marginTop: 15, fontSize: 14, fontWeight: '600' }}>No teams found yet.</Text>

@@ -16,9 +16,7 @@ export default function OnboardingScreen({ navigation }) {
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 {/* Logo */}
                 <View style={styles.logoContainer}>
-                    <View style={styles.logoBox}>
-                        <MaterialCommunityIcons name="book-open-page-variant" size={40} color="#fff" />
-                    </View>
+                    <Text style={styles.sectionTitle}>Geo Conquest</Text>
                 </View>
 
                 {/* Tagline */}
@@ -69,15 +67,7 @@ export default function OnboardingScreen({ navigation }) {
                     </View>
                 </View>
 
-                <View style={styles.permissionCard}>
-                    <MaterialCommunityIcons name="watch" size={22} color="#7C83ED" />
-                    <View style={styles.permissionTextBlock}>
-                        <Text style={styles.permissionTitle}>Smartwatch Pairing (Optional)</Text>
-                        <Text style={styles.permissionDesc}>
-                            Connect your smartwatch for enhanced activity tracking and in-game data.
-                        </Text>
-                    </View>
-                </View>
+
 
                 {/* Sign Up Button */}
                 <TouchableOpacity
@@ -104,7 +94,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     logoContainer: {
-        marginBottom: 24,
+        marginBottom: 10,
     },
     logoBox: {
         width: 72,

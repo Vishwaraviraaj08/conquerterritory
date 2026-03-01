@@ -14,6 +14,7 @@ import {
 import { Ionicons, MaterialCommunityIcons, FontAwesome } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../context/AuthContext';
+import { center } from '@turf/turf';
 
 export default function AuthScreen({ navigation }) {
     const { register, login } = useAuth();
@@ -73,7 +74,13 @@ export default function AuthScreen({ navigation }) {
                 });
             }
         } catch (err) {
-            const msg = err.response?.data?.error || err.message || 'Something went wrong';
+            let msg = 'Something went wrong';
+            if (err.response?.data?.error) {
+                const apiError = err.response.data.error;
+                msg = typeof apiError === 'object' ? (apiError.message || JSON.stringify(apiError)) : apiError;
+            } else if (err.message) {
+                msg = err.message;
+            }
             setErrorMsg(msg);
         } finally {
             setSubmitting(false);
@@ -84,12 +91,6 @@ export default function AuthScreen({ navigation }) {
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                {/* Logo */}
-                <View style={styles.logoContainer}>
-                    <View style={styles.logoBox}>
-                        <MaterialCommunityIcons name="book-open-page-variant" size={36} color="#fff" />
-                    </View>
-                </View>
 
                 <Text style={styles.title}>Join the GeoConquest</Text>
                 <Text style={styles.subtitle}>
@@ -152,52 +153,36 @@ export default function AuthScreen({ navigation }) {
                 {/* Username Field (only for Sign Up) */}
                 {!isLogin && (
                     <>
-                        <Text style={styles.fieldLabel}>Username</Text>
-                        <View style={styles.inputContainer}>
-                            <Ionicons name="person-outline" size={18} color="#666" />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Choose your adventurer name"
-                                placeholderTextColor="#555"
-                                value={username}
-                                onChangeText={setUsername}
-                                autoCapitalize="none"
-                            />
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, justifyContent: 'center' }}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.fieldLabel}>Username</Text>
+                                <View style={styles.inputContainer}>
+                                    <Ionicons name="person-outline" size={18} color="#666" />
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="Username"
+                                        placeholderTextColor="#555"
+                                        value={username}
+                                        onChangeText={setUsername}
+                                        autoCapitalize="none"
+                                    />
+                                </View>
+                            </View>
+
+                            <View style={{ alignItems: 'center' }}>
+                                <Text style={styles.avatarLabel}>Profile Image</Text>
+                                <TouchableOpacity style={styles.avatarContainer} onPress={pickImage} activeOpacity={0.8}>
+                                    {profileImage ? (
+                                        <Image source={{ uri: profileImage }} style={styles.avatarImage} />
+                                    ) : (
+                                        <View style={styles.avatarCircle}>
+                                            <Ionicons name="camera-outline" size={28} color="#7C83ED" />
+                                        </View>
+                                    )}
+                                </TouchableOpacity>
+                            </View>
                         </View>
 
-                        {/* Avatar / Profile Image */}
-                        <Text style={styles.avatarLabel}>Profile Image</Text>
-                        <TouchableOpacity style={styles.avatarContainer} onPress={pickImage} activeOpacity={0.8}>
-                            {profileImage ? (
-                                <Image source={{ uri: profileImage }} style={styles.avatarImage} />
-                            ) : (
-                                <View style={styles.avatarCircle}>
-                                    <Ionicons name="camera-outline" size={32} color="#7C83ED" />
-                                    <Text style={{ color: '#888', fontSize: 10, marginTop: 4 }}>Tap to upload</Text>
-                                </View>
-                            )}
-                        </TouchableOpacity>
-
-                        {/* Team Selection */}
-                        <Text style={styles.teamLabel}>Team Selection</Text>
-                        <TouchableOpacity
-                            style={[styles.teamBtn, selectedTeamAction === 'join' && styles.teamBtnActive]}
-                            onPress={() => setSelectedTeamAction('join')}
-                            activeOpacity={0.85}
-                        >
-                            <Text style={[styles.teamBtnText, selectedTeamAction === 'join' && styles.teamBtnTextActive]}>
-                                Join an Existing Team
-                            </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.teamBtn, selectedTeamAction === 'create' && styles.teamBtnActive]}
-                            onPress={() => setSelectedTeamAction('create')}
-                            activeOpacity={0.85}
-                        >
-                            <Text style={[styles.teamBtnText, selectedTeamAction === 'create' && styles.teamBtnTextActive]}>
-                                Create a New Team
-                            </Text>
-                        </TouchableOpacity>
                     </>
                 )}
 
@@ -217,41 +202,7 @@ export default function AuthScreen({ navigation }) {
                     )}
                 </TouchableOpacity>
 
-                {!isLogin && (
-                    <>
-                        {/* Divider */}
-                        <View style={styles.sectionDivider} />
 
-                        {/* Permissions */}
-                        <Text style={styles.permissionsTitle}>Permissions & Consent</Text>
-
-                        <TouchableOpacity
-                            style={styles.checkboxRow}
-                            onPress={() => setAgreePrivacy(!agreePrivacy)}
-                            activeOpacity={0.7}
-                        >
-                            <View style={[styles.checkbox, agreePrivacy && styles.checkboxChecked]}>
-                                {agreePrivacy && <Ionicons name="checkmark" size={14} color="#fff" />}
-                            </View>
-                            <Text style={styles.checkboxText}>
-                                I agree to the GeoConquest Privacy Policy and Terms of Service. My data may be used to improve the game experience.
-                            </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.checkboxRow}
-                            onPress={() => setAgreeLocation(!agreeLocation)}
-                            activeOpacity={0.7}
-                        >
-                            <View style={[styles.checkbox, agreeLocation && styles.checkboxChecked]}>
-                                {agreeLocation && <Ionicons name="checkmark" size={14} color="#fff" />}
-                            </View>
-                            <Text style={styles.checkboxText}>
-                                I grant GeoConquest access to my device's precise location and motion data for core gameplay functionality and territory claiming.
-                            </Text>
-                        </TouchableOpacity>
-                    </>
-                )}
             </ScrollView>
         </View>
     );
