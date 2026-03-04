@@ -385,57 +385,63 @@ export default function LiveTrackingScreen({ navigation, route }) {
     };
 
     const confirmFinish = async () => {
-        const stats = stopSession(); // Stop and get final stats
+        const stats = await stopSession(); // Stop and get final stats
 
         if (isTeamMode && isHost) {
             try {
                 await api.post(`/capture-sessions/${sessionId}/complete`, {
-                    area: stats.area,
-                    distance: distM,
-                    path: stats.path,
+                    area: stats.area || 0,
+                    distance: stats.distance || 0,
+                    path: stats.path || [],
                     center: stats.path && stats.path.length > 0 ? stats.path[0] : null,
                     stats: {
-                        time: totalSeconds,
-                        avgSpeed: stats.avgSpeed
+                        time: stats.elapsedTime || 1,
+                        avgSpeed: stats.avgSpeed || 0
                     },
                     teamName: sessionData?.teamId ? `Team ${sessionData.teamId}` : undefined
                 });
             } catch (e) {
                 console.log('Failed to complete session on server', e);
-                // Continue anyway to save local result?
             }
         }
 
         const totalSeconds = stats.elapsedTime || 1;
-        const distM = stats.distance;
+        const distM = stats.distance || 0;
         const paceVal = distM > 0 ? (totalSeconds / 60) / (distM / 1000) : 0;
         const paceMin = Math.floor(paceVal);
         const paceSec = Math.round((paceVal - paceMin) * 60);
 
         const weightKg = 70;
-        const met = stats.avgSpeed > 10 ? 8.0 : stats.avgSpeed > 6 ? 6.0 : 3.5;
+        const met = (stats.avgSpeed || 0) > 10 ? 8.0 : (stats.avgSpeed || 0) > 6 ? 6.0 : 3.5;
         const caloriesEst = Math.round(met * weightKg * (totalSeconds / 3600));
-        const areaPoints = Math.round(stats.area * 0.1 + distM * 0.5 + totalSeconds * 0.2);
 
-        const pathCoords = stats.path;
-        const endCoord = pathCoords.length > 0 ? pathCoords[pathCoords.length - 1] : [0, 0];
-        const hasClosedLoop = area > 0; // Or check distance to start < 20m
+        let validArea = stats.area || 0;
+        if (isNaN(validArea)) validArea = 0;
+
+        const areaPoints = Math.round(validArea * 0.1 + distM * 0.5 + totalSeconds * 0.2);
+
+        const pathCoords = stats.path || [];
+        // Ensure path coords is never empty for API requirement
+        const safePathCoords = pathCoords.length >= 2 ? pathCoords : [[0, 0], [0.0001, 0.0001]];
+        const endCoord = safePathCoords[safePathCoords.length - 1];
+
+        const hasClosedLoop = validArea > 0;
 
         navigation.replace('CaptureResults', {
-            area: stats.area.toFixed(1),
+            area: validArea.toFixed(1),
             distance: distM.toFixed(0),
             time: totalSeconds,
-            avgSpeed: stats.avgSpeed.toFixed(1),
-            maxSpeed: stats.maxSpeed.toFixed(1),
+            avgSpeed: (stats.avgSpeed || 0).toFixed(1),
+            maxSpeed: (stats.maxSpeed || 0).toFixed(1),
             pace: `${paceMin}:${paceSec.toString().padStart(2, '0')}`,
             points: areaPoints,
             calories: caloriesEst,
-            path: { type: 'LineString', coordinates: pathCoords },
-            startLocation: stats.startLocation || { type: 'Point', coordinates: [0, 0] },
+            path: { type: 'LineString', coordinates: safePathCoords },
+            startLocation: stats.startLocation || { type: 'Point', coordinates: safePathCoords[0] },
             endLocation: { type: 'Point', coordinates: endCoord },
             gameMode: sessionData?.gameMode || 'solo',
             isPublic: sessionData?.isPublic ?? true,
-            isCapture: hasClosedLoop, // If loop not closed, it's just an activity
+            isCapture: hasClosedLoop,
             capturedAt: new Date().toISOString(),
             sessionId: sessionId || null
         });

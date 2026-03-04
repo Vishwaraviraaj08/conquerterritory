@@ -1,0 +1,1855 @@
+﻿diff --git a/app.json b/app.json
+index 6a60d4e..3ad30b2 100644
+--- a/app.json
++++ b/app.json
+@@ -14,7 +14,13 @@
+     },
+     "ios": {
+       "supportsTablet": true,
+-      "bundleIdentifier": "com.tomtomtracker.app"
++      "bundleIdentifier": "com.tomtomtracker.app",
++      "infoPlist": {
++        "UIBackgroundModes": [
++          "location",
++          "fetch"
++        ]
++      }
+     },
+     "android": {
+       "adaptiveIcon": {
+@@ -22,13 +28,23 @@
+         "backgroundColor": "#ffffff"
+       },
+       "package": "com.tomtomtracker.app",
+-      "edgeToEdgeEnabled": true
++      "edgeToEdgeEnabled": true,
++      "permissions": [
++        "ACCESS_COARSE_LOCATION",
++        "ACCESS_FINE_LOCATION",
++        "ACCESS_BACKGROUND_LOCATION",
++        "FOREGROUND_SERVICE",
++        "FOREGROUND_SERVICE_LOCATION"
++      ]
+     },
+     "web": {
+       "favicon": "./assets/favicon.png"
+     },
+     "plugins": [
+-      "expo-asset"
++      "expo-asset",
++      "expo-location",
++      "expo-task-manager",
++      "@react-native-community/datetimepicker"
+     ],
+     "extra": {
+       "eas": {
+@@ -36,4 +52,4 @@
+       }
+     }
+   }
+-}
+\ No newline at end of file
++}
+diff --git a/package-lock.json b/package-lock.json
+index d8341af..401c5e2 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -10,6 +10,7 @@
+       "dependencies": {
+         "@expo/vector-icons": "^15.0.3",
+         "@react-native-async-storage/async-storage": "2.2.0",
++        "@react-native-community/datetimepicker": "8.4.4",
+         "@react-navigation/bottom-tabs": "^7.13.0",
+         "@react-navigation/native": "^7.1.28",
+         "@react-navigation/native-stack": "^7.12.0",
+@@ -24,6 +25,7 @@
+         "expo-location": "~19.0.8",
+         "expo-sensors": "~15.0.8",
+         "expo-status-bar": "~3.0.9",
++        "expo-task-manager": "^55.0.9",
+         "react": "19.1.0",
+         "react-native": "0.81.5",
+         "react-native-asset": "^2.2.8",
+@@ -2761,6 +2763,29 @@
+         "react-native": "^0.0.0-0 || >=0.65 <1.0"
+       }
+     },
++    "node_modules/@react-native-community/datetimepicker": {
++      "version": "8.4.4",
++      "resolved": "https://registry.npmjs.org/@react-native-community/datetimepicker/-/datetimepicker-8.4.4.tgz",
++      "integrity": "sha512-bc4ZixEHxZC9/qf5gbdYvIJiLZ5CLmEsC3j+Yhe1D1KC/3QhaIfGDVdUcid0PdlSoGOSEq4VlB93AWyetEyBSQ==",
++      "license": "MIT",
++      "dependencies": {
++        "invariant": "^2.2.4"
++      },
++      "peerDependencies": {
++        "expo": ">=52.0.0",
++        "react": "*",
++        "react-native": "*",
++        "react-native-windows": "*"
++      },
++      "peerDependenciesMeta": {
++        "expo": {
++          "optional": true
++        },
++        "react-native-windows": {
++          "optional": true
++        }
++      }
++    },
+     "node_modules/@react-native/assets-registry": {
+       "version": "0.81.5",
+       "resolved": "https://registry.npmjs.org/@react-native/assets-registry/-/assets-registry-0.81.5.tgz",
+@@ -7159,6 +7184,19 @@
+         "react-native": "*"
+       }
+     },
++    "node_modules/expo-task-manager": {
++      "version": "55.0.9",
++      "resolved": "https://registry.npmjs.org/expo-task-manager/-/expo-task-manager-55.0.9.tgz",
++      "integrity": "sha512-ABqEua5FCjXmzRB+OGKD2KcQL2gkh57nCwGnFGe5Km+/b+0uxIs0lq0L3PPyoYPs1tAWp5FKfn2jcnz1nbBCVA==",
++      "license": "MIT",
++      "dependencies": {
++        "unimodules-app-loader": "~55.0.2"
++      },
++      "peerDependencies": {
++        "expo": "*",
++        "react-native": "*"
++      }
++    },
+     "node_modules/expo/node_modules/@babel/code-frame": {
+       "version": "7.29.0",
+       "resolved": "https://registry.npmjs.org/@babel/code-frame/-/code-frame-7.29.0.tgz",
+@@ -11595,6 +11633,12 @@
+         "node": ">=4"
+       }
+     },
++    "node_modules/unimodules-app-loader": {
++      "version": "55.0.2",
++      "resolved": "https://registry.npmjs.org/unimodules-app-loader/-/unimodules-app-loader-55.0.2.tgz",
++      "integrity": "sha512-SarK/0fxceV3mpP26+0mlwDbHOn98OkHEMAifrRU0+uhAnAuZkEJKNPL/QKBFhwNCaeQGiL9s3XAQ9ZMtkJ47g==",
++      "license": "MIT"
++    },
+     "node_modules/unique-string": {
+       "version": "2.0.0",
+       "resolved": "https://registry.npmjs.org/unique-string/-/unique-string-2.0.0.tgz",
+diff --git a/package.json b/package.json
+index cdbf2e8..07c50bf 100644
+--- a/package.json
++++ b/package.json
+@@ -11,6 +11,7 @@
+   "dependencies": {
+     "@expo/vector-icons": "^15.0.3",
+     "@react-native-async-storage/async-storage": "2.2.0",
++    "@react-native-community/datetimepicker": "8.4.4",
+     "@react-navigation/bottom-tabs": "^7.13.0",
+     "@react-navigation/native": "^7.1.28",
+     "@react-navigation/native-stack": "^7.12.0",
+@@ -25,6 +26,7 @@
+     "expo-location": "~19.0.8",
+     "expo-sensors": "~15.0.8",
+     "expo-status-bar": "~3.0.9",
++    "expo-task-manager": "^55.0.9",
+     "react": "19.1.0",
+     "react-native": "0.81.5",
+     "react-native-asset": "^2.2.8",
+diff --git a/src/config.js b/src/config.js
+index 3a163a7..384bf96 100644
+--- a/src/config.js
++++ b/src/config.js
+@@ -1,8 +1,8 @@
++// If you are testing locally on an Android Emulator, use 10.0.2.2
++// const API_BASE_URL = 'http://10.0.2.2:5000/api';
+ 
+-export const API_BASE_URL = 'https://geoconquest-api.vercel.app/api';
++// If testing locally on a physical device, use your computer's Wi-Fi IP address:
++// const API_BASE_URL = 'http://192.168.0.9:5000/api';
+ 
+-
+-
+-// const SERVER_IP = '192.168.0.9';
+-// const SERVER_PORT = 5000;
+-// export const API_BASE_URL = `http://${SERVER_IP}:${SERVER_PORT}/api`;
+\ No newline at end of file
++// Vercel Production Server (Currently doesn't have our latest backend fixes)
++export const API_BASE_URL = 'https://geoconquest-api.vercel.app/api';
+\ No newline at end of file
+diff --git a/src/context/TrackingContext.js b/src/context/TrackingContext.js
+index 2424a08..723d45d 100644
+--- a/src/context/TrackingContext.js
++++ b/src/context/TrackingContext.js
+@@ -1,9 +1,53 @@
+ import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
+ import * as Location from 'expo-location';
++import * as TaskManager from 'expo-task-manager';
+ import * as turf from '@turf/turf';
+ import api from '../api';
+ 
+ const TrackingContext = createContext(null);
++const BACKGROUND_LOCATION_TASK = 'BACKGROUND_LOCATION_TASK';
++
++// Shared state for background task to communicate with foreground
++let backgroundUpdateCallback = null;
++let currentPath = [];
++let currentDistance = 0;
++let currentLastLoc = null;
++
++// Define the background task
++TaskManager.defineTask(BACKGROUND_LOCATION_TASK, ({ data, error }) => {
++    if (error) {
++        console.error('Task error:', error);
++        return;
++    }
++    if (data) {
++        const { locations } = data;
++        let newDist = 0;
++        let coordsToAdd = [];
++
++        locations.forEach(loc => {
++            const { latitude, longitude } = loc.coords;
++            const coord = [longitude, latitude];
++            if (currentLastLoc) {
++                const d = turf.distance(turf.point(currentLastLoc), turf.point(coord), { units: 'meters' });
++                if (d > 1 && d < 100) newDist += d;
++            }
++            currentLastLoc = coord;
++            coordsToAdd.push(coord);
++        });
++
++        currentDistance += newDist;
++        currentPath = [...currentPath, ...coordsToAdd];
++
++        if (backgroundUpdateCallback) {
++            backgroundUpdateCallback({
++                distanceDiff: newDist,
++                newCoords: coordsToAdd,
++                lastCoord: currentLastLoc,
++                latestRawCoords: locations[locations.length - 1].coords
++            });
++        }
++    }
++});
+ 
+ export function TrackingProvider({ children }) {
+     const [isTracking, setIsTracking] = useState(false);
+@@ -18,12 +62,51 @@ export function TrackingProvider({ children }) {
+     const [sessionData, setSessionData] = useState(null); // gameMode, teamId, etc.
+     const [startLocation, setStartLocation] = useState(null);
+ 
+-    const watchRef = useRef(null);
+     const timerRef = useRef(null);
+     const updateIntervalRef = useRef(null); // For backend updates
+     const speedsRef = useRef([]);
+     const lastLocRef = useRef(null);
+ 
++    // Sync background updates to React state
++    useEffect(() => {
++        backgroundUpdateCallback = (data) => {
++            if (isPaused) return;
++
++            const { distanceDiff, newCoords, lastCoord, latestRawCoords } = data;
++            const spd = Math.max(0, (latestRawCoords.speed || 0) * 3.6);
++
++            if (!startLocation && newCoords.length > 0) {
++                setStartLocation({ type: 'Point', coordinates: newCoords[0] });
++            }
++
++            setCurrentSpeed(spd);
++            setMaxSpeed(prev => Math.max(prev, spd));
++            speedsRef.current.push(spd);
++            setAvgSpeed(speedsRef.current.length > 0 ? speedsRef.current.reduce((a, b) => a + b, 0) / speedsRef.current.length : 0);
++
++            if (distanceDiff > 0) setDistance(prev => prev + distanceDiff);
++
++            lastLocRef.current = lastCoord;
++
++            setPath(prev => {
++                const newPath = [...prev, ...newCoords];
++                // Calculate area if possible
++                if (newPath.length >= 3) {
++                    try {
++                        const closed = [...newPath, newPath[0]];
++                        const polygon = turf.polygon([closed]);
++                        setArea(turf.area(polygon));
++                    } catch (e) { }
++                }
++                return newPath;
++            });
++        };
++
++        return () => {
++            backgroundUpdateCallback = null;
++        };
++    }, [isPaused, startLocation]);
++
+     useEffect(() => {
+         if (isTracking && !isPaused) {
+             timerRef.current = setInterval(() => {
+@@ -33,7 +116,6 @@ export function TrackingProvider({ children }) {
+             if (timerRef.current) clearInterval(timerRef.current);
+         }
+         return () => { if (timerRef.current) clearInterval(timerRef.current); };
+-        return () => { if (timerRef.current) clearInterval(timerRef.current); };
+     }, [isTracking, isPaused]);
+ 
+     // Backend Update Loop
+@@ -59,6 +141,11 @@ export function TrackingProvider({ children }) {
+     }, [isTracking, isPaused, sessionData, path]);
+ 
+     const startSession = async (data) => {
++        const { status } = await Location.requestBackgroundPermissionsAsync();
++        if (status !== 'granted') {
++            console.warn('Background location permission denied');
++        }
++
+         // Reset state
+         setElapsedTime(0);
+         setDistance(0);
+@@ -74,46 +161,21 @@ export function TrackingProvider({ children }) {
+         lastLocRef.current = null;
+         setStartLocation(null);
+ 
+-        // Start location watching
+-        watchRef.current = await Location.watchPositionAsync(
+-            { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 2 },
+-            (loc) => {
+-                if (isPaused) return;
+-
+-                const { latitude, longitude, speed, heading } = loc.coords;
+-                const coord = [longitude, latitude];
+-                const spd = Math.max(0, (speed || 0) * 3.6); // km/h
+-
+-                if (!startLocation) {
+-                    setStartLocation({ type: 'Point', coordinates: coord });
+-                }
++        currentPath = [];
++        currentDistance = 0;
++        currentLastLoc = null;
+ 
+-                setCurrentSpeed(spd);
+-                if (spd > maxSpeed) setMaxSpeed(spd);
+-                speedsRef.current.push(spd);
+-                setAvgSpeed(speedsRef.current.length > 0 ? speedsRef.current.reduce((a, b) => a + b, 0) / speedsRef.current.length : 0);
+-
+-                if (lastLocRef.current) {
+-                    const d = turf.distance(turf.point(lastLocRef.current), turf.point(coord), { units: 'meters' });
+-                    if (d > 1 && d < 100) setDistance(prev => prev + d);
+-                }
+-
+-                lastLocRef.current = coord;
+-                setPath(prev => {
+-                    const newPath = [...prev, coord];
+-
+-                    // Calculate area if possible
+-                    if (newPath.length >= 3) {
+-                        try {
+-                            const closed = [...newPath, newPath[0]];
+-                            const polygon = turf.polygon([closed]);
+-                            setArea(turf.area(polygon));
+-                        } catch (e) { }
+-                    }
+-                    return newPath;
+-                });
++        await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
++            accuracy: Location.Accuracy.BestForNavigation,
++            timeInterval: 1000,
++            distanceInterval: 2,
++            showsBackgroundLocationIndicator: true,
++            foregroundService: {
++                notificationTitle: 'Geo Conquest Tracking',
++                notificationBody: 'Your movement is being tracked for continuous territory capture',
++                notificationColor: '#5B63D3',
+             }
+-        );
++        });
+     };
+ 
+     const pauseSession = () => setIsPaused(true);
+@@ -122,10 +184,12 @@ export function TrackingProvider({ children }) {
+     const stopSession = async () => {
+         setIsTracking(false);
+         setIsPaused(false);
+-        if (watchRef.current) {
+-            watchRef.current.remove();
+-            watchRef.current = null;
++
++        const hasTask = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
++        if (hasTask) {
++            await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+         }
++
+         if (timerRef.current) clearInterval(timerRef.current);
+         if (updateIntervalRef.current) clearInterval(updateIntervalRef.current);
+ 
+@@ -147,10 +211,12 @@ export function TrackingProvider({ children }) {
+     const cancelSession = async () => {
+         setIsTracking(false);
+         setIsPaused(false);
+-        if (watchRef.current) {
+-            watchRef.current.remove();
+-            watchRef.current = null;
++
++        const hasTask = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
++        if (hasTask) {
++            await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+         }
++
+         if (timerRef.current) clearInterval(timerRef.current);
+         if (updateIntervalRef.current) clearInterval(updateIntervalRef.current);
+ 
+diff --git a/src/screens/CaptureResultsScreen.js b/src/screens/CaptureResultsScreen.js
+index c8243d1..db4b772 100644
+--- a/src/screens/CaptureResultsScreen.js
++++ b/src/screens/CaptureResultsScreen.js
+@@ -178,7 +178,7 @@ export default function CaptureResultsScreen({ navigation, route }) {
+                 </View>
+ 
+                 <TouchableOpacity style={[styles.confirmBtn, saving && { opacity: 0.7 }]} onPress={handleConfirm} activeOpacity={0.85} disabled={saving}>
+-                    {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmBtnText}>{saved ? 'Go Home' : (isCapture ? 'Confirm Capture' : 'Save Activity')}</Text>}
++                    {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmBtnText}>{saved ? 'View Territories' : (isCapture ? 'Confirm Capture' : 'Save Activity')}</Text>}
+                 </TouchableOpacity>
+ 
+                 <View style={styles.secondaryBtns}>
+diff --git a/src/screens/CommunityScreen.js b/src/screens/CommunityScreen.js
+index 29f0f5e..83be58b 100644
+--- a/src/screens/CommunityScreen.js
++++ b/src/screens/CommunityScreen.js
+@@ -21,6 +21,7 @@ import * as Clipboard from 'expo-clipboard';
+ import api from '../api';
+ import { useAuth } from '../context/AuthContext';
+ import Svg, { Circle, Path, Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
++import DateTimePicker from '@react-native-community/datetimepicker';
+ 
+ // Custom Animated Empty State
+ const AnimatedEmptyState = () => {
+@@ -124,6 +125,7 @@ export default function CommunityScreen({ navigation }) {
+     const [searchTag, setSearchTag] = useState('');
+     const [searchResults, setSearchResults] = useState([]);
+     const [isSearching, setIsSearching] = useState(false);
++    const [showDatePicker, setShowDatePicker] = useState(false);
+ 
+     useFocusEffect(
+         useCallback(() => {
+@@ -541,16 +543,43 @@ export default function CommunityScreen({ navigation }) {
+                                     value={searchTag}
+                                     onChangeText={setSearchTag}
+                                 />
+-                                <TextInput
+-                                    style={[styles.searchInput, { flex: 1 }]}
+-                                    placeholder="YYYY-MM-DD"
+-                                    placeholderTextColor="#666"
+-                                    value={searchDate}
+-                                    onChangeText={setSearchDate}
+-                                />
++                                <View style={{ flex: 1, flexDirection: 'row', gap: 6 }}>
++                                    <TouchableOpacity
++                                        style={[styles.searchInput, { flex: 1, justifyContent: 'center' }]}
++                                        onPress={() => setShowDatePicker(true)}
++                                    >
++                                        <Text style={{ color: searchDate ? '#fff' : '#666' }}>
++                                            {searchDate || "Select Date"}
++                                        </Text>
++                                    </TouchableOpacity>
++                                    {searchDate ? (
++                                        <TouchableOpacity
++                                            onPress={() => setSearchDate('')}
++                                            style={{ width: 40, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,68,68,0.15)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,68,68,0.3)' }}
++                                        >
++                                            <Ionicons name="close" size={18} color="#FF4444" />
++                                        </TouchableOpacity>
++                                    ) : null}
++                                </View>
+                             </View>
+                         </View>
+ 
++                        {showDatePicker && (
++                            <DateTimePicker
++                                value={searchDate ? new Date(searchDate) : new Date()}
++                                mode="date"
++                                display="default"
++                                onChange={(event, selectedDate) => {
++                                    setShowDatePicker(Platform.OS === 'ios');
++                                    if (event.type === 'set' && selectedDate) {
++                                        setSearchDate(selectedDate.toISOString().split('T')[0]);
++                                    } else if (event.type === 'dismissed') {
++                                        setShowDatePicker(false);
++                                    }
++                                }}
++                            />
++                        )}
++
+                         {isSearching && <ActivityIndicator size="small" color="#5B63D3" style={{ marginVertical: 10 }} />}
+ 
+                         {/* Scrollable Results */}
+diff --git a/src/screens/HomeScreen.js b/src/screens/HomeScreen.js
+index 3bbb47d..04a9fca 100644
+--- a/src/screens/HomeScreen.js
++++ b/src/screens/HomeScreen.js
+@@ -251,65 +251,109 @@ const getMapHtml = () => `
+             map.flyTo({ center: [currentLng, currentLat], zoom: is3D ? 18 : 16, pitch: is3D ? 60 : 0, duration: 1000 });
+         }
+ 
+-        function addTerritories(territories) {
+-            // Remove old layers/sources
++        function getDistinctColor(str, opacity) {
++            let hash = 0;
++            for (let i = 0; i < str.length; i++) {
++                hash = str.charCodeAt(i) + ((hash << 5) - hash);
++            }
++            const hue = Math.abs(hash) % 360;
++            return 'hsla(' + hue + ', 72%, 55%, ' + opacity + ')';
++        }
++
++        // Clear all territory and path layers
++        function clearCaptureLayers() {
+             territoryLayers.forEach(function(id) {
+-                if (map.getLayer(id + '-fill')) map.removeLayer(id + '-fill');
+-                if (map.getLayer(id + '-line')) map.removeLayer(id + '-line');
+-                if (map.getSource(id)) map.removeSource(id);
++                try {
++                    if (map.getLayer(id + '-fill')) map.removeLayer(id + '-fill');
++                    if (map.getLayer(id + '-line')) map.removeLayer(id + '-line');
++                    if (map.getLayer(id + '-path')) map.removeLayer(id + '-path');
++                    if (map.getSource(id)) map.removeSource(id);
++                } catch(e) {}
+             });
+             territoryLayers = [];
+             territoryData = {};
++        }
+ 
+-            territories.forEach(function(t, i) {
+-                var srcId = 'territory-' + i;
++        // Draw captured territories (filled polygon) AND attempted paths (dashed line)
++        function addCaptures(captures) {
++            clearCaptureLayers();
++
++            captures.forEach(function(t, i) {
++                var srcId = 'capture-' + i;
+                 territoryLayers.push(srcId);
+                 territoryData[srcId] = t;
+ 
+-                var coords = t.coordinates && t.coordinates.coordinates ? t.coordinates.coordinates : t.polygon;
+-                if (!coords || !coords[0] || coords[0].length < 3) return;
+-
+-                map.addSource(srcId, {
+-                    type: 'geojson',
+-                    data: {
+-                        type: 'Feature',
+-                        properties: { id: srcId },
+-                        geometry: { type: 'Polygon', coordinates: coords }
+-                    }
+-                });
+-
+-                map.addLayer({
+-                    id: srcId + '-fill', type: 'fill', source: srcId,
+-                    paint: {
+-                        'fill-color': t.isMine ? 'rgba(91,99,211,0.3)' : 'rgba(232,168,56,0.2)',
+-                        'fill-outline-color': t.isMine ? '#5B63D3' : '#E8A838'
++                var ownerId = t.ownerId || 'system';
++                var isMine = t.isMine;
++                var fillColor = isMine ? 'rgba(91,99,211,0.35)' : getDistinctColor(ownerId, 0.3);
++                var lineColor = isMine ? '#7C83ED' : getDistinctColor(ownerId, 1.0);
++
++                // ---- CAPTURED TERRITORY: filled polygon ----
++                if (t.hasTerritory) {
++                    var polyCoords = t.coordinates && t.coordinates.coordinates ? t.coordinates.coordinates : null;
++                    if (polyCoords && polyCoords[0] && polyCoords[0].length >= 3) {
++                        try {
++                            map.addSource(srcId, {
++                                type: 'geojson',
++                                data: { type: 'Feature', properties: { id: srcId }, geometry: { type: 'Polygon', coordinates: polyCoords } }
++                            });
++                            map.addLayer({ id: srcId + '-fill', type: 'fill', source: srcId, paint: { 'fill-color': fillColor } });
++                            map.addLayer({ id: srcId + '-line', type: 'line', source: srcId, paint: { 'line-color': lineColor, 'line-width': 2 } });
++                            map.on('click', srcId + '-fill', function() {
++                                var td = territoryData[srcId];
++                                window.ReactNativeWebView.postMessage(JSON.stringify({
++                                    type: 'TERRITORY_TAP',
++                                    territory: { id: td._id, name: td.name || 'Territory', area: td.area || 0,
++                                        capturedAt: td.capturedAt, owner: td.ownerName || 'You',
++                                        distance: td.captureDistance || 0, duration: td.captureDuration || 0, avgSpeed: td.captureAvgSpeed || 0 }
++                                }));
++                            });
++                        } catch(e) {}
+                     }
+-                });
+-                map.addLayer({
+-                    id: srcId + '-line', type: 'line', source: srcId,
+-                    paint: {
+-                        'line-color': t.isMine ? '#7C83ED' : '#E8A838',
+-                        'line-width': 2
++                } else {
++                    // ---- ATTEMPTED RUN: dashed path line ----
++                    var pathCoords = t.path && t.path.coordinates ? t.path.coordinates : null;
++                    if (pathCoords && pathCoords.length >= 2) {
++                        try {
++                            map.addSource(srcId, {
++                                type: 'geojson',
++                                data: { type: 'Feature', geometry: { type: 'LineString', coordinates: pathCoords } }
++                            });
++                            map.addLayer({
++                                id: srcId + '-path', type: 'line', source: srcId,
++                                paint: { 'line-color': lineColor, 'line-width': 2.5, 'line-dasharray': [3, 2], 'line-opacity': 0.75 }
++                            });
++                        } catch(e) {}
+                     }
+-                });
++                }
++            });
++        }
+ 
+-                map.on('click', srcId + '-fill', function(e) {
+-                    var td = territoryData[srcId];
+-                    window.ReactNativeWebView.postMessage(JSON.stringify({
+-                        type: 'TERRITORY_TAP',
+-                        territory: {
+-                            id: td._id || srcId,
+-                            name: td.name || 'Territory',
+-                            area: td.area || 0,
+-                            capturedAt: td.capturedAt || '',
+-                            gameMode: td.gameMode || 'solo',
+-                            owner: td.ownerName || 'You',
+-                            distance: td.captureDistance || 0,
+-                            duration: td.captureDuration || 0,
+-                            avgSpeed: td.captureAvgSpeed || 0,
+-                        }
+-                    }));
+-                });
++        function addTerritories(territories) {
++            clearCaptureLayers();
++            territories.forEach(function(t, i) {
++                var srcId = 'territory-' + i;
++                territoryLayers.push(srcId);
++                territoryData[srcId] = t;
++                var coords = t.coordinates && t.coordinates.coordinates ? t.coordinates.coordinates : t.polygon;
++                if (!coords || !coords[0] || coords[0].length < 3) return;
++                var ownerId = t.ownerId || t.ownerName || 'other';
++                var fillColor = t.isMine ? 'rgba(91,99,211,0.3)' : getDistinctColor(ownerId, 0.3);
++                var outlineColor = t.isMine ? '#5B63D3' : getDistinctColor(ownerId, 0.8);
++                try {
++                    map.addSource(srcId, { type: 'geojson', data: { type: 'Feature', properties: { id: srcId }, geometry: { type: 'Polygon', coordinates: coords } } });
++                    map.addLayer({ id: srcId + '-fill', type: 'fill', source: srcId, paint: { 'fill-color': fillColor, 'fill-outline-color': outlineColor } });
++                    map.addLayer({ id: srcId + '-line', type: 'line', source: srcId, paint: { 'line-color': outlineColor, 'line-width': 2 } });
++                    map.on('click', srcId + '-fill', function(e) {
++                        var td = territoryData[srcId];
++                        window.ReactNativeWebView.postMessage(JSON.stringify({
++                            type: 'TERRITORY_TAP',
++                            territory: { id: td._id || srcId, name: td.name || 'Territory', area: td.area || 0,
++                                capturedAt: td.capturedAt || '', gameMode: td.gameMode || 'solo', owner: td.ownerName || 'You',
++                                distance: td.captureDistance || 0, duration: td.captureDuration || 0, avgSpeed: td.captureAvgSpeed || 0 }
++                        }));
++                    });
++                } catch(e) {}
+             });
+         }
+ 
+@@ -334,6 +378,7 @@ const getMapHtml = () => `
+                 else if (d.type === 'TOGGLE_3D') toggle3D(d.enable);
+                 else if (d.type === 'CENTER') centerOnUser();
+                 else if (d.type === 'UPDATE_PEERS') updatePeers(d.peers);
++                else if (d.type === 'ADD_CAPTURES') addCaptures(d.captures);
+                 else if (d.type === 'ADD_TERRITORIES') addTerritories(d.territories);
+             } catch(e) {
+                 // window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ERROR', message: 'Msg Parse Error: ' + e.message }));
+@@ -379,26 +424,57 @@ export default function HomeScreen({ navigation }) {
+         })();
+     }, []);
+ 
+-    // Fetch territories from server
++    // Fetch captures (territories + attempted runs) from server
+     const loadTerritories = useCallback(async () => {
+         try {
+-            const res = await api.get('/territories');
+-            const terrs = (res.data.territories || []).map(t => ({
+-                ...t,
+-                isMine: true,
+-                ownerName: user?.username || 'You',
+-                captureDistance: t.capture?.distance || 0,
+-                captureDuration: t.capture?.duration || 0,
+-                captureAvgSpeed: t.capture?.avgSpeed || 0,
+-            }));
+-            setTerritories(terrs);
+-        } catch (e) { }
+-    }, [user]);
++            const endpoint = publicSession ? '/captures/public' : '/captures';
++            const res = await api.get(endpoint);
++            const capturesRaw = res.data.captures || [];
++            const myId = user?.id || user?._id;
++
++            const mapData = capturesRaw.map(c => {
++                const userId = c.user?._id || c.user || '';
++                const isMine = userId === myId;
++                const ownerName = c.user?.username || (isMine ? user?.username : 'Unknown');
++                const ownerId = userId || 'system';
++                const hasTerritory = c.territory != null;
++
++                return {
++                    _id: hasTerritory ? c.territory._id : c._id,
++                    name: hasTerritory ? c.territory.name : 'Attempted Run',
++                    area: hasTerritory ? (c.territory.area || 0) : 0,
++                    capturedAt: hasTerritory ? c.territory.capturedAt : c.capturedAt,
++                    coordinates: hasTerritory ? c.territory.coordinates : null,
++                    path: c.path || null,   // raw LineString path for attempted runs
++                    hasTerritory,
++                    isMine,
++                    ownerName,
++                    ownerId,
++                    captureDistance: c.distance || 0,
++                    captureDuration: c.duration || 0,
++                    captureAvgSpeed: c.avgSpeed || 0,
++                };
++            });
++
++            setTerritories(mapData.filter(t => t.hasTerritory));
++
++            // Send all (territories + attempts) to the map WebView
++            if (webViewRef.current) {
++                webViewRef.current.postMessage(JSON.stringify({
++                    type: 'ADD_CAPTURES',
++                    captures: mapData
++                }));
++            }
++        } catch (e) {
++            console.error('Error loading territories:', e);
++        }
++    }, [user, publicSession]);
+ 
+     useEffect(() => {
+         loadTerritories();
+     }, [loadTerritories]);
+ 
++
+     // Poll for active sessions (Real-Time Multiplayer)
+     useEffect(() => {
+         let interval;
+@@ -421,27 +497,32 @@ export default function HomeScreen({ navigation }) {
+         return () => clearInterval(interval);
+     }, [publicSession, mapReady]);
+ 
+-    // Send territories to map when ready
++    // When map becomes ready, (re)load and push all captures to it
+     useEffect(() => {
+-        if (mapReady && webViewRef.current && territories.length > 0) {
+-            webViewRef.current.postMessage(JSON.stringify({
+-                type: 'ADD_TERRITORIES',
+-                territories: territories,
+-            }));
++        if (mapReady) {
++            loadTerritories();
+         }
+-    }, [mapReady, territories]);
++    }, [mapReady]);
+ 
+     useEffect(() => {
+-        (async () => {
+-            const hasPermission = await requestLocationPermissions();
+-            if (!hasPermission) return;
++        fetchLocation();
++        return () => {
++            if (watchRef.current) watchRef.current.remove();
++        };
++    }, []);
++
++    const fetchLocation = async () => {
++        const hasPermission = await requestLocationPermissions();
++        if (!hasPermission) return;
+ 
++        try {
+             const loc = await Location.getCurrentPositionAsync({
+                 accuracy: Location.Accuracy.High
+             });
+             setLocation(loc.coords);
+             locationRef.current = loc.coords;
+ 
++            if (watchRef.current) watchRef.current.remove();
+             watchRef.current = await Location.watchPositionAsync(
+                 { accuracy: Location.Accuracy.High, timeInterval: 3000, distanceInterval: 5 },
+                 (newLoc) => {
+@@ -449,16 +530,10 @@ export default function HomeScreen({ navigation }) {
+                     locationRef.current = newLoc.coords;
+                 }
+             );
+-        })();
+-
+-        return () => {
+-            if (watchRef.current) {
+-                watchRef.current.remove();
+-                watchRef.current = null;
+-            }
+-        };
+-    }, []);
+-
++        } catch (error) {
++            console.warn("Error fetching location:", error);
++        }
++    };
+     useEffect(() => {
+         if (location && mapReady && webViewRef.current) {
+             webViewRef.current.postMessage(JSON.stringify({
+@@ -503,50 +578,49 @@ export default function HomeScreen({ navigation }) {
+         return `${m}m ${s}s`;
+     };
+ 
+-    if (!location) {
+-        return (
+-            <View style={styles.loadingContainer}>
+-                <ActivityIndicator size="large" color="#5B63D3" />
+-                <Text style={styles.loadingText}>Locating you...</Text>
+-            </View>
+-        );
+-    }
++    const reloadMap = () => {
++        setWebviewKey(prev => prev + 1);
++        setMapReady(false);
++        fetchLocation();
++        loadTerritories();
++    };
+ 
+     return (
+         <View style={styles.container}>
+             <StatusBar barStyle="light-content" />
+-            <WebView
+-                key={webviewKey}
+-                ref={webViewRef}
+-                originWhitelist={['*']}
+-                source={{ html: getMapHtml(), baseUrl: '' }} // Added baseUrl
+-                style={styles.map}
+-                javaScriptEnabled={true}
+-                domStorageEnabled={true}
+-                androidLayerType="hardware"
+-                startInLoadingState={true}
+-                mixedContentMode="always"
+-                allowFileAccess={true}
+-                renderLoading={() => (
+-                    <View style={styles.mapLoadingOverlay}>
+-                        <ActivityIndicator size="large" color="#5B63D3" />
+-                        <Text style={styles.loadingText}>Loading Map...</Text>
+-                    </View>
+-                )}
+-                onMessage={(event) => {
+-                    try {
+-                        const data = JSON.parse(event.nativeEvent.data);
+-                        if (data.type === 'MAP_READY') {
+-                            setMapReady(true);
+-                            console.log('Map Rendered');
+-                        }
+-                        else if (data.type === '3D_CHANGED') setIs3D(data.is3D);
+-                        else if (data.type === 'TERRITORY_TAP') {
+-                            setSelectedTerritory(data.territory);
+-                        }
+-                    } catch (e) { }
+-                }}
+-            />
++            {!location ? (
++                <View style={styles.loadingContainer}>
++                    <ActivityIndicator size="large" color="#00e5ff" />
++                    <Text style={styles.loadingText}>Locating you...</Text>
++                    <TouchableOpacity style={styles.retryBtn} onPress={fetchLocation}>
++                        <Ionicons name="refresh" size={16} color="#0a0e1a" />
++                        <Text style={styles.retryBtnText}>Retry</Text>
++                    </TouchableOpacity>
++                </View>
++            ) : (
++                <WebView
++                    key={webviewKey}
++                    ref={webViewRef}
++                    originWhitelist={['*']}
++                    source={{ html: getMapHtml() }}
++                    style={styles.webview}
++                    javaScriptEnabled={true}
++                    domStorageEnabled={true}
++                    onMessage={(event) => {
++                        try {
++                            const data = JSON.parse(event.nativeEvent.data);
++                            if (data.type === 'MAP_READY') {
++                                setMapReady(true);
++                                console.log('Map Rendered');
++                            }
++                            else if (data.type === '3D_CHANGED') setIs3D(data.is3D);
++                            else if (data.type === 'TERRITORY_TAP') {
++                                setSelectedTerritory(data.territory);
++                            }
++                        } catch (e) { }
++                    }}
++                />
++            )}
+ 
+             {/* Top Header */}
+             <View style={styles.topHeader}>
+@@ -605,10 +679,7 @@ export default function HomeScreen({ navigation }) {
+                 </TouchableOpacity>
+                 <TouchableOpacity
+                     style={styles.mapCtrlBtn}
+-                    onPress={() => {
+-                        setMapReady(false);
+-                        setWebviewKey(prev => prev + 1); // Force reload
+-                    }}
++                    onPress={reloadMap}
+                 >
+                     <Ionicons name="refresh" size={20} color="#fff" />
+                 </TouchableOpacity>
+@@ -685,6 +756,11 @@ export default function HomeScreen({ navigation }) {
+ 
+                         <View style={styles.popupDivider} />
+ 
++                        <View style={styles.popupRow}>
++                            <Ionicons name="person-outline" size={16} color="#7C83ED" />
++                            <Text style={styles.popupLabel}>Owner</Text>
++                            <Text style={styles.popupValue}>{selectedTerritory?.ownerName || 'You'}</Text>
++                        </View>
+                         <View style={styles.popupRow}>
+                             <Ionicons name="calendar-outline" size={16} color="#7C83ED" />
+                             <Text style={styles.popupLabel}>Date</Text>
+@@ -735,7 +811,7 @@ export default function HomeScreen({ navigation }) {
+ const styles = StyleSheet.create({
+     container: { flex: 1, backgroundColor: '#0a0e1a' },
+     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0e1a' },
+-    loadingText: { marginTop: 10, fontSize: 14, color: '#888', fontWeight: '500' },
++    loadingText: { color: '#00e5ff', marginTop: 15, fontSize: 16, fontWeight: '600', letterSpacing: 1 },
+     map: { flex: 1 },
+     mapLoadingOverlay: {
+         ...StyleSheet.absoluteFillObject,
+diff --git a/src/screens/LeaderboardsScreen.js b/src/screens/LeaderboardsScreen.js
+index 9ee4106..c4a2889 100644
+--- a/src/screens/LeaderboardsScreen.js
++++ b/src/screens/LeaderboardsScreen.js
+@@ -14,14 +14,15 @@ import {
+ } from 'react-native';
+ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+ import { useScrollToTop } from '@react-navigation/native';
++import AsyncStorage from '@react-native-async-storage/async-storage';
+ import api from '../api';
+ import UserProfileModal from '../components/UserProfileModal';
+ import FriendRequestsModal from '../components/FriendRequestsModal';
+ import { useNotifications } from '../context/NotificationContext';
+ import { useAuth } from '../context/AuthContext';
+ 
+-const SCOPE_FILTERS = ['Local', 'State', 'Country', 'Global', 'Team'];
+-const SCOPE_MAP = { Local: 'local', State: 'state', Country: 'country', Global: 'global', Team: 'team' };
++const SCOPE_FILTERS = ['Country', 'Global', 'Team'];
++const SCOPE_MAP = { Country: 'country', Global: 'global', Team: 'team' };
+ 
+ const PERIOD_OPTIONS = [
+     { label: 'Daily', value: 'daily' },
+@@ -64,7 +65,16 @@ const SearchModal = ({ visible, onClose, onUserPress }) => {
+     const [query, setQuery] = useState('');
+     const [results, setResults] = useState([]);
+     const [loading, setLoading] = useState(false);
+-    const { user } = useAuth(); // Assuming useAuth is available or passed down
++    // localPending stores userIds we've already sent requests to (persisted across restarts)
++    const [localPending, setLocalPending] = useState({});
++    const { user } = useAuth();
++
++    // Load persisted pending requests from AsyncStorage on mount
++    useEffect(() => {
++        AsyncStorage.getItem('pendingFriendRequests').then(raw => {
++            if (raw) setLocalPending(JSON.parse(raw));
++        }).catch(() => { });
++    }, []);
+ 
+     useEffect(() => {
+         const timer = setTimeout(() => {
+@@ -77,7 +87,14 @@ const SearchModal = ({ visible, onClose, onUserPress }) => {
+         setLoading(true);
+         try {
+             const res = await api.get('/users/search', { params: { q: query } });
+-            setResults(res.data.users);
++            // Merge server relationship with local pending map
++            const enriched = (res.data.users || []).map(u => {
++                if (localPending[u._id] && u.relationship === 'none') {
++                    return { ...u, relationship: 'pending_sent' };
++                }
++                return u;
++            });
++            setResults(enriched);
+         } catch (e) {
+             console.log('Search error:', e);
+         } finally {
+@@ -88,7 +105,14 @@ const SearchModal = ({ visible, onClose, onUserPress }) => {
+     const handleAddFriend = async (friendId) => {
+         try {
+             await api.post('/friends/request', { friendId });
+-            alert('Friend request sent!');
++            // Persist the pending state locally
++            const updated = { ...localPending, [friendId]: true };
++            setLocalPending(updated);
++            await AsyncStorage.setItem('pendingFriendRequests', JSON.stringify(updated));
++            // Update UI immediately
++            setResults(prev => prev.map(u =>
++                u._id === friendId ? { ...u, relationship: 'pending_sent' } : u
++            ));
+         } catch (e) {
+             alert(e.response?.data?.error || 'Failed to send request');
+         }
+@@ -139,10 +163,22 @@ const SearchModal = ({ visible, onClose, onUserPress }) => {
+                                     </View>
+                                     {item._id !== user?._id && (
+                                         <TouchableOpacity
+-                                            style={{ marginTop: 4, backgroundColor: '#5B63D3', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}
+-                                            onPress={() => handleAddFriend(item._id)}
++                                            style={[
++                                                { marginTop: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
++                                                item.relationship === 'friends' ? { backgroundColor: '#4CAF50' }
++                                                    : item.relationship === 'pending_sent' ? { backgroundColor: '#E8A838' }
++                                                        : item.relationship === 'pending_received' ? { backgroundColor: '#E8A838' }
++                                                            : { backgroundColor: '#5B63D3' }
++                                            ]}
++                                            onPress={() => item.relationship === 'none' && handleAddFriend(item._id)}
++                                            disabled={item.relationship !== 'none'}
+                                         >
+-                                            <Text style={{ fontSize: 10, color: '#fff', fontWeight: 'bold' }}>ADD</Text>
++                                            <Text style={{ fontSize: 10, color: '#fff', fontWeight: 'bold' }}>
++                                                {item.relationship === 'friends' ? 'FRIENDS'
++                                                    : item.relationship === 'pending_sent' ? 'PENDING'
++                                                        : item.relationship === 'pending_received' ? 'ACCEPT'
++                                                            : 'ADD'}
++                                            </Text>
+                                         </TouchableOpacity>
+                                     )}
+                                 </View>
+@@ -299,17 +335,6 @@ export default function LeaderboardsScreen() {
+                 </View>
+             </View>
+ 
+-            {/* Action buttons */}
+-            <View style={styles.actionRow}>
+-                <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8}>
+-                    <Ionicons name="flag-outline" size={16} color="#fff" />
+-                    <Text style={styles.actionBtnText}>Challenge Invite</Text>
+-                </TouchableOpacity>
+-                <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8}>
+-                    <Ionicons name="people-outline" size={16} color="#fff" />
+-                    <Text style={styles.actionBtnText}>Join Team Event</Text>
+-                </TouchableOpacity>
+-            </View>
+ 
+             {/* Leaderboard List */}
+             {loading ? (
+diff --git a/src/screens/LiveTrackingScreen.js b/src/screens/LiveTrackingScreen.js
+index faac9af..92ba7e4 100644
+--- a/src/screens/LiveTrackingScreen.js
++++ b/src/screens/LiveTrackingScreen.js
+@@ -385,57 +385,63 @@ export default function LiveTrackingScreen({ navigation, route }) {
+     };
+ 
+     const confirmFinish = async () => {
+-        const stats = stopSession(); // Stop and get final stats
++        const stats = await stopSession(); // Stop and get final stats
+ 
+         if (isTeamMode && isHost) {
+             try {
+                 await api.post(`/capture-sessions/${sessionId}/complete`, {
+-                    area: stats.area,
+-                    distance: distM,
+-                    path: stats.path,
++                    area: stats.area || 0,
++                    distance: stats.distance || 0,
++                    path: stats.path || [],
+                     center: stats.path && stats.path.length > 0 ? stats.path[0] : null,
+                     stats: {
+-                        time: totalSeconds,
+-                        avgSpeed: stats.avgSpeed
++                        time: stats.elapsedTime || 1,
++                        avgSpeed: stats.avgSpeed || 0
+                     },
+                     teamName: sessionData?.teamId ? `Team ${sessionData.teamId}` : undefined
+                 });
+             } catch (e) {
+                 console.log('Failed to complete session on server', e);
+-                // Continue anyway to save local result?
+             }
+         }
+ 
+         const totalSeconds = stats.elapsedTime || 1;
+-        const distM = stats.distance;
++        const distM = stats.distance || 0;
+         const paceVal = distM > 0 ? (totalSeconds / 60) / (distM / 1000) : 0;
+         const paceMin = Math.floor(paceVal);
+         const paceSec = Math.round((paceVal - paceMin) * 60);
+ 
+         const weightKg = 70;
+-        const met = stats.avgSpeed > 10 ? 8.0 : stats.avgSpeed > 6 ? 6.0 : 3.5;
++        const met = (stats.avgSpeed || 0) > 10 ? 8.0 : (stats.avgSpeed || 0) > 6 ? 6.0 : 3.5;
+         const caloriesEst = Math.round(met * weightKg * (totalSeconds / 3600));
+-        const areaPoints = Math.round(stats.area * 0.1 + distM * 0.5 + totalSeconds * 0.2);
+ 
+-        const pathCoords = stats.path;
+-        const endCoord = pathCoords.length > 0 ? pathCoords[pathCoords.length - 1] : [0, 0];
+-        const hasClosedLoop = area > 0; // Or check distance to start < 20m
++        let validArea = stats.area || 0;
++        if (isNaN(validArea)) validArea = 0;
++
++        const areaPoints = Math.round(validArea * 0.1 + distM * 0.5 + totalSeconds * 0.2);
++
++        const pathCoords = stats.path || [];
++        // Ensure path coords is never empty for API requirement
++        const safePathCoords = pathCoords.length >= 2 ? pathCoords : [[0, 0], [0.0001, 0.0001]];
++        const endCoord = safePathCoords[safePathCoords.length - 1];
++
++        const hasClosedLoop = validArea > 0;
+ 
+         navigation.replace('CaptureResults', {
+-            area: stats.area.toFixed(1),
++            area: validArea.toFixed(1),
+             distance: distM.toFixed(0),
+             time: totalSeconds,
+-            avgSpeed: stats.avgSpeed.toFixed(1),
+-            maxSpeed: stats.maxSpeed.toFixed(1),
++            avgSpeed: (stats.avgSpeed || 0).toFixed(1),
++            maxSpeed: (stats.maxSpeed || 0).toFixed(1),
+             pace: `${paceMin}:${paceSec.toString().padStart(2, '0')}`,
+             points: areaPoints,
+             calories: caloriesEst,
+-            path: { type: 'LineString', coordinates: pathCoords },
+-            startLocation: stats.startLocation || { type: 'Point', coordinates: [0, 0] },
++            path: { type: 'LineString', coordinates: safePathCoords },
++            startLocation: stats.startLocation || { type: 'Point', coordinates: safePathCoords[0] },
+             endLocation: { type: 'Point', coordinates: endCoord },
+             gameMode: sessionData?.gameMode || 'solo',
+             isPublic: sessionData?.isPublic ?? true,
+-            isCapture: hasClosedLoop, // If loop not closed, it's just an activity
++            isCapture: hasClosedLoop,
+             capturedAt: new Date().toISOString(),
+             sessionId: sessionId || null
+         });
+diff --git a/src/screens/ProfileScreen.js b/src/screens/ProfileScreen.js
+index 12f056b..935a618 100644
+--- a/src/screens/ProfileScreen.js
++++ b/src/screens/ProfileScreen.js
+@@ -32,18 +32,17 @@ const StatBox = ({ icon, value, label, color }) => (
+     </View>
+ );
+ 
+-// Mock Achievements Data (In a real app, this might come from the backend or be merged)
+ const ALL_ACHIEVEMENTS = [
+-    { id: 'first_step', title: 'First Step', description: 'Take your first step.', icon: 'walk' },
+-    { id: '1km_walk', title: '1km Walker', description: 'Walk a total of 1 kilometer.', icon: 'map-marker-distance' },
+-    { id: '5km_runner', title: '5km Runner', description: 'Run a total of 5 kilometers.', icon: 'run' },
+-    { id: 'territory_claimer', title: 'Land Owner', description: 'Claim your first territory.', icon: 'flag-variant' },
+-    { id: 'social_butterfly', title: 'Social Butterfly', description: 'Add a friend.', icon: 'account-multiple-plus' },
+-    { id: 'night_owl', title: 'Night Owl', description: 'Complete a capture after 10 PM.', icon: 'weather-night' },
+-    { id: 'early_bird', title: 'Early Bird', description: 'Complete a capture before 7 AM.', icon: 'weather-sunset-up' },
+-    { id: 'week_streak', title: 'Consistency', description: 'Maintain a 7-day streak.', icon: 'fire' },
+-    { id: 'marathoner', title: 'Marathoner', description: 'Walk 42km in total.', icon: 'run-fast' },
+-    { id: 'explorer', title: 'Explorer', description: 'Visit 10 different territories.', icon: 'compass' },
++    { id: 'first_step', title: 'First Step', description: 'Take your first step.', icon: 'walk', targetValue: 1, getStat: (s) => s.steps || 0 },
++    { id: '1km_walk', title: '1km Walker', description: 'Walk a total of 1 kilometer.', icon: 'map-marker-distance', targetValue: 1000, getStat: (s) => s.totalDistance || 0 },
++    { id: '5km_runner', title: '5km Runner', description: 'Run a total of 5 kilometers.', icon: 'run', targetValue: 5000, getStat: (s) => s.totalDistance || 0 },
++    { id: 'territory_claimer', title: 'Land Owner', description: 'Claim your first territory.', icon: 'flag-variant', targetValue: 1, getStat: (s) => s.totalCaptures || 0 },
++    { id: 'social_butterfly', title: 'Social Butterfly', description: 'Add a friend.', icon: 'account-multiple-plus', targetValue: 1, getStat: (s, p) => p.friendsCount || 0 },
++    { id: 'week_streak', title: 'Consistency', description: 'Maintain a 7-day streak.', icon: 'fire', targetValue: 7, getStat: (s) => s.streak || 0 },
++    { id: 'marathoner', title: 'Marathoner', description: 'Walk 42km in total.', icon: 'run-fast', targetValue: 42000, getStat: (s) => s.totalDistance || 0 },
++    { id: 'explorer', title: 'Explorer', description: 'Complete 10 runs.', icon: 'compass', targetValue: 10, getStat: (s) => s.totalRuns || 0 },
++    { id: 'calorie_crusher', title: 'Calorie Crusher', description: 'Burn 5,000 calories.', icon: 'lightning-bolt', targetValue: 5000, getStat: (s) => s.caloriesBurned || 0 },
++    { id: 'land_baron', title: 'Land Baron', description: 'Claim 50,000 m┬▓ territory.', icon: 'earth', targetValue: 50000, getStat: (s) => s.totalArea || 0 },
+ ];
+ 
+ export default function ProfileScreen() {
+@@ -90,10 +89,43 @@ export default function ProfileScreen() {
+ 
+     const fetchProfile = useCallback(async () => {
+         try {
+-            const res = await api.get('/users/profile');
+-            setProfile(res.data.user);
++            const [profRes, capRes] = await Promise.all([
++                api.get('/users/profile'),
++                api.get('/captures?limit=500')
++            ]);
++            const userData = profRes.data.user;
++            const caps = capRes.data.captures || [];
++
++            // Compute live stats from actual captures
++            const liveDist = caps.reduce((a, c) => a + (c.distance || 0), 0);
++            const liveCals = caps.reduce((a, c) => a + (c.calories || 0), 0);
++            const liveSteps = caps.reduce((a, c) => a + Math.floor((c.distance || 0) / 0.762), 0);
++            const liveArea = caps.reduce((a, c) => a + (c.area || 0), 0);
++            const liveTerritories = caps.filter(c => c.area > 0).length;
++            const liveRuns = caps.length;
++
++            // Merge live stats into profile (prefer computed over stale DB values)
++            const mergedStats = {
++                ...(userData.stats || {}),
++                totalDistance: liveDist,
++                caloriesBurned: liveCals,
++                steps: liveSteps,
++                totalArea: liveArea,
++                totalCaptures: liveTerritories,
++                totalRuns: liveRuns,
++            };
++
++            // Recalculate health score with live data
++            let hs = 50;
++            hs += Math.min(liveSteps / 1000, 20);
++            hs += Math.min(liveDist / 5000, 15);
++            hs += Math.min(liveCals / 500, 10);
++            hs += Math.min(mergedStats.streak || 0, 5);
++            mergedStats.healthScore = Math.min(Math.round(hs), 100);
++
++            setProfile({ ...userData, stats: mergedStats });
+         } catch (e) {
+-            console.log('Profile fetch error, using local user');
++            console.log('Profile fetch error, using local user:', e.message);
+             setProfile(user);
+         } finally {
+             setLoading(false);
+@@ -133,7 +165,8 @@ export default function ProfileScreen() {
+             return {
+                 ...ach,
+                 unlocked: !!unlocked,
+-                unlockedAt: unlocked ? unlocked.unlockedAt : null
++                unlockedAt: unlocked ? unlocked.unlockedAt : null,
++                currentValue: ach.getStat ? ach.getStat(stats, p) : 0
+             };
+         });
+ 
+@@ -225,10 +258,12 @@ export default function ProfileScreen() {
+                 {/* Key Statistics */}
+                 <Text style={styles.sectionTitle}>Key Statistics</Text>
+                 <View style={styles.statsGrid}>
+-                    <StatBox icon="vector-polygon" value={stats.totalArea ? `${Math.round(stats.totalArea)} m┬▓` : "0 m┬▓"} label="Area Claimed" color="#5B63D3" />
+-                    <StatBox icon="run-fast" value={stats.totalDistance ? `${(stats.totalDistance / 1000).toFixed(1)} km` : "0 km"} label="Distance" color="#E8A838" />
++                    <StatBox icon="vector-polygon" value={stats.totalArea ? `${Math.round(stats.totalArea)} m┬▓` : '0 m┬▓'} label="Area Claimed" color="#5B63D3" />
++                    <StatBox icon="run-fast" value={stats.totalDistance ? `${(stats.totalDistance / 1000).toFixed(1)} km` : '0 km'} label="Distance" color="#E8A838" />
+                     <StatBox icon="fire" value={`${(stats.caloriesBurned || 0).toLocaleString()}`} label="Calories" color="#E53935" />
+                     <StatBox icon="chart-line" value={`${stats.streak || 0} days`} label="Streak" color="#2dd06e" />
++                    <StatBox icon="earth" value={`${stats.totalCaptures || 0}`} label="Territories" color="#7C83ED" />
++                    <StatBox icon="shoe-print" value={`${(stats.steps || 0).toLocaleString()}`} label="Steps" color="#9C27B0" />
+                 </View>
+ 
+                 {/* Achievements Section */}
+@@ -267,6 +302,22 @@ export default function ProfileScreen() {
+                             <View style={styles.achievementInfo}>
+                                 <Text style={[styles.achievementTitle, !ach.unlocked && styles.textDim]}>{ach.title}</Text>
+                                 <Text style={[styles.achievementDesc, !ach.unlocked && styles.textDim]}>{ach.description}</Text>
++
++                                {!ach.unlocked && ach.targetValue && ach.currentValue !== undefined && (
++                                    <View style={{ marginTop: 8 }}>
++                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
++                                            <Text style={{ fontSize: 10, color: '#888daf' }}>Progress</Text>
++                                            <Text style={{ fontSize: 10, color: '#888daf' }}>
++                                                {typeof ach.currentValue === 'number' && ach.targetValue >= 1000
++                                                    ? `${(ach.currentValue / 1000).toFixed(1)}k / ${(ach.targetValue / 1000).toFixed(1)}k`
++                                                    : `${Math.round(ach.currentValue)} / ${ach.targetValue}`}
++                                            </Text>
++                                        </View>
++                                        <View style={{ height: 4, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 2 }}>
++                                            <View style={{ height: 4, backgroundColor: '#5B63D3', borderRadius: 2, width: `${Math.min(100, Math.max(0, (ach.currentValue / ach.targetValue) * 100))}%` }} />
++                                        </View>
++                                    </View>
++                                )}
+                             </View>
+                             <MaterialCommunityIcons
+                                 name={ach.unlocked ? "check-circle" : "checkbox-blank-circle-outline"}
+diff --git a/src/screens/TerritoryOverviewScreen.js b/src/screens/TerritoryOverviewScreen.js
+index f9511aa..e67844f 100644
+--- a/src/screens/TerritoryOverviewScreen.js
++++ b/src/screens/TerritoryOverviewScreen.js
+@@ -1,196 +1,237 @@
+ import React, { useState, useEffect, useCallback, useRef } from 'react';
+ import {
+-    StyleSheet,
+-    View,
+-    Text,
+-    TouchableOpacity,
+-    FlatList,
+-    StatusBar,
+-    ActivityIndicator,
++    StyleSheet, View, Text, TouchableOpacity, FlatList,
++    StatusBar, ActivityIndicator, Dimensions, Modal,
+ } from 'react-native';
+ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
++import Svg, { Polyline, Polygon } from 'react-native-svg';
+ import { useScrollToTop } from '@react-navigation/native';
+ import api from '../api';
+ 
+-const getLevelLabel = (def) => {
+-    if (def >= 7) return 'High';
+-    if (def >= 4) return 'Medium';
+-    return 'Low';
+-};
++const { width: SCREEN_W } = Dimensions.get('window');
+ 
+-const formatArea = (v) => {
++// ΓöÇΓöÇΓöÇ Helpers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
++const formatArea = v => {
+     if (!v) return '0 m┬▓';
+     if (v >= 1000) return `${(v / 1000).toFixed(1)}k m┬▓`;
+     return `${v.toFixed(0)} m┬▓`;
+ };
+-
+-const formatDist = (v) => {
++const formatDist = v => {
+     if (!v) return '0 m';
+     if (v >= 1000) return `${(v / 1000).toFixed(1)} km`;
+     return `${v.toFixed(0)} m`;
+ };
+-
+-const formatDuration = (sec) => {
++const formatDuration = sec => {
+     if (!sec) return '0:00';
+     const m = Math.floor(sec / 60);
+     const s = Math.floor(sec % 60);
+-    if (m >= 60) {
+-        const h = Math.floor(m / 60);
+-        const rm = m % 60;
+-        return `${h}h ${rm}m`;
+-    }
++    if (m >= 60) return `${Math.floor(m / 60)}h ${m % 60}m`;
+     return `${m}:${s.toString().padStart(2, '0')}`;
+ };
+-
+-const formatDate = (d) => {
++const formatDate = d => {
+     if (!d) return '';
+-    const date = new Date(d);
+-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
++    return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+ };
+-
+-const formatTime = (d) => {
++const formatTime = d => {
+     if (!d) return '';
+-    const date = new Date(d);
+-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
++    return new Date(d).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
++};
++
++// ΓöÇΓöÇΓöÇ Mini SVG Path Preview ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
++// Renders a small scaled-down path or polygon preview from raw coordinates
++const MiniMap = ({ capture, size = 60, isAttempted }) => {
++    // Extract coordinates from path (LineString) OR territory polygon
++    let rawCoords = null;
++    if (!isAttempted && capture.territory?.coordinates?.coordinates?.[0]) {
++        rawCoords = capture.territory.coordinates.coordinates[0]; // [[lng,lat],...]
++    } else if (capture.path?.coordinates) {
++        rawCoords = capture.path.coordinates; // [[lng,lat],...]
++    }
++
++    if (!rawCoords || rawCoords.length < 2) {
++        return (
++            <View style={[styles.mapThumb, { width: size, height: size, backgroundColor: isAttempted ? 'rgba(229,57,53,0.08)' : 'rgba(91,99,211,0.08)' }]}>
++                <MaterialCommunityIcons name="map-marker-radius" size={28} color={isAttempted ? 'rgba(229,57,53,0.5)' : 'rgba(91,99,211,0.5)'} />
++            </View>
++        );
++    }
++
++    const lngs = rawCoords.map(c => c[0]);
++    const lats = rawCoords.map(c => c[1]);
++    const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
++    const minLat = Math.min(...lats), maxLat = Math.max(...lats);
++    const rangeX = maxLng - minLng || 0.00001;
++    const rangeY = maxLat - minLat || 0.00001;
++    const pad = 6;
++    const drawSize = size - pad * 2;
++
++    const points = rawCoords.map(c => {
++        const x = pad + ((c[0] - minLng) / rangeX) * drawSize;
++        const y = pad + ((maxLat - c[1]) / rangeY) * drawSize; // flip Y
++        return `${x.toFixed(1)},${y.toFixed(1)}`;
++    }).join(' ');
++
++    const color = isAttempted ? '#E53935' : '#7C83ED';
++
++    return (
++        <View style={[styles.mapThumb, { width: size, height: size }]}>
++            <Svg width={size} height={size}>
++                {isAttempted ? (
++                    <Polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeDasharray="3,2" strokeOpacity={0.85} />
++                ) : (
++                    <Polygon points={points} fill={`${color}33`} stroke={color} strokeWidth="2" />
++                )}
++            </Svg>
++        </View>
++    );
+ };
+ 
+-const TerritoryCard = ({ item, onLaunch }) => {
+-    const defLabel = getLevelLabel(item.defenseLevel);
+-    const cap = item.capture || {};
++// ΓöÇΓöÇΓöÇ Territory Card ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
++const TerritoryCard = ({ item, onLaunch, onRequestDelete }) => {
++    const isAttempted = !item.territory;
++    const territoryData = item.territory || {};
++    const area = territoryData.area || item.area || 0;
++    const name = territoryData.name || `Run on ${formatDate(item.capturedAt)}`;
+     const [expanded, setExpanded] = useState(false);
+ 
+     return (
+-        <View style={styles.card}>
+-            <TouchableOpacity style={styles.cardTop} onPress={() => setExpanded(!expanded)} activeOpacity={0.8}>
+-                <View style={styles.mapThumb}>
+-                    <MaterialCommunityIcons name="map-marker-radius" size={28} color="rgba(91,99,211,0.5)" />
+-                </View>
++        <View style={[styles.card, isAttempted && { borderColor: 'rgba(229,57,53,0.35)' }]}>
++            {/* Top Row: Mini Map + Info + Expand + Delete */}
++            <View style={styles.cardTop}>
++                <MiniMap capture={item} size={66} isAttempted={isAttempted} />
+                 <View style={styles.cardInfo}>
+-                    <Text style={styles.cardName}>{item.name}</Text>
+-                    <Text style={styles.cardArea}>Area: {formatArea(item.area)}</Text>
++                    <Text style={[styles.cardName, isAttempted && { color: '#E57373' }]} numberOfLines={1}>
++                        {isAttempted ? 'ΓÜá Attempted Capture' : name}
++                    </Text>
++                    {!isAttempted && (
++                        <Text style={styles.cardArea}>Area: {formatArea(area)}</Text>
++                    )}
+                     <View style={styles.badgeRow}>
+-                        <View style={[styles.badge, defLabel === 'High' ? styles.badgeHigh : defLabel === 'Medium' ? styles.badgeMed : styles.badgeLow]}>
+-                            <Text style={styles.badgeText}>{defLabel}</Text>
+-                        </View>
+-                        <Text style={styles.contestedText}>Lvl {item.defenseLevel}</Text>
+                         {item.gameMode && (
+                             <View style={styles.modeBadge}>
+                                 <Text style={styles.modeBadgeText}>{item.gameMode}</Text>
+                             </View>
+                         )}
++                        <Text style={styles.cardDist}>{formatDist(item.distance)}</Text>
++                        <Text style={styles.cardDur}>{formatDuration(item.duration)}</Text>
+                     </View>
+                 </View>
+-                <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color="#666" />
+-            </TouchableOpacity>
++                <View style={styles.cardActions}>
++                    <TouchableOpacity onPress={() => setExpanded(!expanded)} style={styles.expandBtn}>
++                        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color="#888" />
++                    </TouchableOpacity>
++                    <TouchableOpacity onPress={() => onRequestDelete(item._id, isAttempted ? 'Attempted Capture' : name)} style={styles.deleteBtn}>
++                        <Ionicons name="trash-outline" size={16} color="#E53935" />
++                    </TouchableOpacity>
++                </View>
++            </View>
+ 
+-            {/* Capture date/time row */}
++            {/* Date Row */}
+             <View style={styles.dateRow}>
+-                <Ionicons name="calendar-outline" size={13} color="#7C83ED" />
+-                <Text style={styles.dateText}>{formatDate(item.capturedAt || cap.capturedAt)}</Text>
+-                <Ionicons name="time-outline" size={13} color="#7C83ED" style={{ marginLeft: 10 }} />
+-                <Text style={styles.dateText}>{formatTime(item.capturedAt || cap.capturedAt)}</Text>
++                <Ionicons name="calendar-outline" size={12} color={isAttempted ? '#E57373' : '#7C83ED'} />
++                <Text style={styles.dateText}>{formatDate(item.capturedAt)}</Text>
++                <Ionicons name="time-outline" size={12} color={isAttempted ? '#E57373' : '#7C83ED'} style={{ marginLeft: 8 }} />
++                <Text style={styles.dateText}>{formatTime(item.capturedAt)}</Text>
+             </View>
+ 
+-            {/* Expanded capture details */}
+-            {expanded && cap && (
++            {/* Expanded Stats */}
++            {expanded && (
+                 <View style={styles.captureDetails}>
+                     <View style={styles.detailGrid}>
+-                        <View style={styles.detailItem}>
+-                            <MaterialCommunityIcons name="run-fast" size={16} color="#E8A838" />
+-                            <Text style={styles.detailValue}>{formatDist(cap.distance)}</Text>
+-                            <Text style={styles.detailLabel}>Distance</Text>
+-                        </View>
+-                        <View style={styles.detailItem}>
+-                            <Ionicons name="timer-outline" size={16} color="#5B63D3" />
+-                            <Text style={styles.detailValue}>{formatDuration(cap.duration)}</Text>
+-                            <Text style={styles.detailLabel}>Duration</Text>
+-                        </View>
+-                        <View style={styles.detailItem}>
+-                            <MaterialCommunityIcons name="speedometer" size={16} color="#2dd06e" />
+-                            <Text style={styles.detailValue}>{(cap.avgSpeed || 0).toFixed(1)}</Text>
+-                            <Text style={styles.detailLabel}>Avg km/h</Text>
+-                        </View>
+-                        <View style={styles.detailItem}>
+-                            <MaterialCommunityIcons name="speedometer-medium" size={16} color="#E53935" />
+-                            <Text style={styles.detailValue}>{(cap.maxSpeed || 0).toFixed(1)}</Text>
+-                            <Text style={styles.detailLabel}>Max km/h</Text>
+-                        </View>
+-                        <View style={styles.detailItem}>
+-                            <MaterialCommunityIcons name="fire" size={16} color="#FF6B35" />
+-                            <Text style={styles.detailValue}>{cap.calories || 0}</Text>
+-                            <Text style={styles.detailLabel}>Calories</Text>
+-                        </View>
+-                        <View style={styles.detailItem}>
+-                            <MaterialCommunityIcons name="shoe-print" size={16} color="#9C27B0" />
+-                            <Text style={styles.detailValue}>{cap.pace || '--:--'}</Text>
+-                            <Text style={styles.detailLabel}>Pace</Text>
+-                        </View>
++                        {[
++                            { icon: 'run-fast', color: '#E8A838', value: formatDist(item.distance), label: 'Distance' },
++                            { icon: 'timer-outline', color: '#5B63D3', value: formatDuration(item.duration), label: 'Duration', useIonicon: true },
++                            { icon: 'speedometer', color: '#2dd06e', value: `${(item.avgSpeed || 0).toFixed(1)}`, label: 'Avg km/h' },
++                            { icon: 'speedometer-medium', color: '#E53935', value: `${(item.maxSpeed || 0).toFixed(1)}`, label: 'Max km/h' },
++                            { icon: 'fire', color: '#FF6B35', value: `${item.calories || 0}`, label: 'Calories' },
++                            { icon: 'shoe-print', color: '#9C27B0', value: item.pace || '--:--', label: 'Pace' },
++                        ].map((s, idx) => (
++                            <View key={idx} style={styles.detailItem}>
++                                <MaterialCommunityIcons name={s.icon} size={15} color={s.color} />
++                                <Text style={styles.detailValue}>{s.value}</Text>
++                                <Text style={styles.detailLabel}>{s.label}</Text>
++                            </View>
++                        ))}
+                     </View>
++                    {!isAttempted && (
++                        <TouchableOpacity style={styles.launchBtn} onPress={() => onLaunch(item)} activeOpacity={0.85}>
++                            <MaterialCommunityIcons name="run-fast" size={14} color="#fff" />
++                            <Text style={styles.launchBtnText}>Launch Run</Text>
++                        </TouchableOpacity>
++                    )}
+                 </View>
+             )}
+-
+-            <View style={styles.cardMid}>
+-                <View style={styles.midItem}>
+-                    <Text style={styles.midLabel}>Owner</Text>
+-                    <Text style={styles.midValue}>You</Text>
+-                </View>
+-                <View style={styles.midItem}>
+-                    <Text style={styles.midLabel}>Durability</Text>
+-                    <View style={styles.durabilityBarBg}>
+-                        <View style={[styles.durabilityBarFill, { width: `${item.durability}%`, backgroundColor: item.durability > 70 ? '#2dd06e' : item.durability > 40 ? '#E8A838' : '#E53935' }]} />
+-                    </View>
+-                    <Text style={styles.midValue}>{item.durability}%</Text>
+-                </View>
+-            </View>
+-
+-            <View style={styles.cardActions}>
+-                <TouchableOpacity style={styles.historyBtn} activeOpacity={0.8}>
+-                    <Ionicons name="time-outline" size={16} color="#7C83ED" />
+-                    <Text style={styles.historyBtnText}>View History</Text>
+-                </TouchableOpacity>
+-                <TouchableOpacity style={styles.launchBtn} onPress={() => onLaunch(item)} activeOpacity={0.85}>
+-                    <MaterialCommunityIcons name="run-fast" size={16} color="#fff" />
+-                    <Text style={styles.launchBtnText}>Launch Run</Text>
+-                </TouchableOpacity>
+-            </View>
+         </View>
+     );
+ };
+ 
++// ΓöÇΓöÇΓöÇ Main Screen ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+ export default function TerritoryOverviewScreen({ navigation }) {
+-    const [territories, setTerritories] = useState([]);
++    const [captures, setCaptures] = useState([]);
+     const [loading, setLoading] = useState(true);
++    const [filter, setFilter] = useState('all');
++    const [deletingId, setDeletingId] = useState(null);
+     const listRef = useRef(null);
+-
+     useScrollToTop(listRef);
+ 
+-    const fetchTerritories = useCallback(async () => {
++    // Custom popup state
++    const [popup, setPopup] = useState({ visible: false, title: '', message: '', onConfirm: null });
++
++    const showPopup = (title, message, onConfirm) => setPopup({ visible: true, title, message, onConfirm });
++    const hidePopup = () => setPopup({ visible: false, title: '', message: '', onConfirm: null });
++
++    const fetchCaptures = useCallback(async () => {
+         try {
+-            const res = await api.get('/territories');
+-            setTerritories(res.data.territories || []);
++            const res = await api.get('/captures');
++            setCaptures(res.data.captures || []);
+         } catch (e) {
+-            console.log('Territories fetch error:', e.message);
+-            setTerritories([]);
++            console.log('Captures fetch error:', e.message);
++            setCaptures([]);
+         } finally {
+             setLoading(false);
+         }
+     }, []);
+ 
+-    useEffect(() => {
+-        fetchTerritories();
+-    }, [fetchTerritories]);
++    useEffect(() => { fetchCaptures(); }, [fetchCaptures]);
++
++    const requestDeleteCapture = (captureId, captureName) => {
++        showPopup(
++            'Delete Activity',
++            `Are you sure you want to delete "${captureName}"? This action cannot be undone.`,
++            async () => {
++                setDeletingId(captureId);
++                hidePopup();
++                try {
++                    await api.delete(`/captures/${captureId}`);
++                    setCaptures(prev => prev.filter(c => c._id !== captureId));
++                } catch (e) {
++                    showPopup('Error', e.response?.data?.error || 'Failed to delete activity', null);
++                } finally {
++                    setDeletingId(null);
++                }
++            }
++        );
++    };
+ 
+-    // Summary stats
+-    const totalArea = territories.reduce((acc, t) => acc + (t.area || 0), 0);
+-    const totalCount = territories.length;
++    const filteredCaptures = captures.filter(cap => {
++        if (filter === 'captured') return !!cap.territory;
++        if (filter === 'attempted') return !cap.territory;
++        return true;
++    });
++
++    const totalTerritories = captures.filter(c => !!c.territory).length;
++    const totalRuns = captures.length;
++    const totalDistance = captures.reduce((a, c) => a + (c.distance || 0), 0);
++    const totalCalories = captures.reduce((a, c) => a + (c.calories || 0), 0);
+ 
+     return (
+         <View style={styles.container}>
+             <StatusBar barStyle="light-content" />
++
+             {/* Header */}
+             <View style={styles.header}>
+-                <Text style={styles.headerTitle}>My Territories</Text>
+-                <TouchableOpacity onPress={() => { setLoading(true); fetchTerritories(); }} activeOpacity={0.7}>
++                <Text style={styles.headerTitle}>My Activity</Text>
++                <TouchableOpacity onPress={() => { setLoading(true); fetchCaptures(); }} activeOpacity={0.7}>
+                     <Ionicons name="refresh-outline" size={22} color="#fff" />
+                 </TouchableOpacity>
+             </View>
+@@ -198,33 +239,58 @@ export default function TerritoryOverviewScreen({ navigation }) {
+             {/* Summary Stats */}
+             <View style={styles.summaryRow}>
+                 <View style={styles.summaryItem}>
+-                    <MaterialCommunityIcons name="earth" size={22} color="#5B63D3" />
+-                    <Text style={styles.summaryValue}>{totalCount}</Text>
+-                    <Text style={styles.summaryLabel}>{totalCount === 1 ? 'Territory' : 'Territories'}</Text>
++                    <MaterialCommunityIcons name="run-fast" size={20} color="#E8A838" />
++                    <Text style={styles.summaryValue}>{totalRuns}</Text>
++                    <Text style={styles.summaryLabel}>Runs</Text>
++                </View>
++                <View style={styles.summaryDivider} />
++                <View style={styles.summaryItem}>
++                    <MaterialCommunityIcons name="earth" size={20} color="#5B63D3" />
++                    <Text style={styles.summaryValue}>{totalTerritories}</Text>
++                    <Text style={styles.summaryLabel}>Territories</Text>
+                 </View>
+                 <View style={styles.summaryDivider} />
+                 <View style={styles.summaryItem}>
+-                    <MaterialCommunityIcons name="vector-polygon" size={22} color="#2dd06e" />
+-                    <Text style={styles.summaryValue}>{formatArea(totalArea)}</Text>
+-                    <Text style={styles.summaryLabel}>Total Area</Text>
++                    <MaterialCommunityIcons name="map-marker-distance" size={20} color="#2dd06e" />
++                    <Text style={styles.summaryValue}>{formatDist(totalDistance)}</Text>
++                    <Text style={styles.summaryLabel}>Distance</Text>
++                </View>
++                <View style={styles.summaryDivider} />
++                <View style={styles.summaryItem}>
++                    <MaterialCommunityIcons name="fire" size={20} color="#FF6B35" />
++                    <Text style={styles.summaryValue}>{totalCalories}</Text>
++                    <Text style={styles.summaryLabel}>Calories</Text>
+                 </View>
+             </View>
+ 
+-            <Text style={styles.listTitle}>Territory List</Text>
++            {/* Filter Tabs */}
++            <View style={styles.sectionHeader}>
++                <Text style={styles.listTitle}>All Activity</Text>
++                <View style={styles.filterRow}>
++                    {['all', 'captured', 'attempted'].map(f => (
++                        <TouchableOpacity key={f} onPress={() => setFilter(f)} style={[styles.filterBtn, filter === f && styles.filterBtnActive]}>
++                            <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>
++                                {f.charAt(0).toUpperCase() + f.slice(1)}
++                            </Text>
++                        </TouchableOpacity>
++                    ))}
++                </View>
++            </View>
+ 
+             {loading ? (
+                 <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                     <ActivityIndicator size="large" color="#5B63D3" />
+                 </View>
+-            ) : territories.length > 0 ? (
++            ) : filteredCaptures.length > 0 ? (
+                 <FlatList
+                     ref={listRef}
+-                    data={territories}
+-                    keyExtractor={(item) => item._id}
++                    data={filteredCaptures}
++                    keyExtractor={item => item._id}
+                     renderItem={({ item }) => (
+                         <TerritoryCard
+                             item={item}
+                             onLaunch={() => navigation.navigate('StartCapture')}
++                            onRequestDelete={requestDeleteCapture}
+                         />
+                     )}
+                     contentContainerStyle={styles.listContent}
+@@ -234,10 +300,31 @@ export default function TerritoryOverviewScreen({ navigation }) {
+                 <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                     <MaterialCommunityIcons name="map-marker-off-outline" size={50} color="rgba(91,99,211,0.3)" />
+                     <Text style={{ color: '#666', marginTop: 12, fontSize: 14 }}>
+-                        No territories yet. Go capture some!
++                        {filter === 'all' ? 'No activities yet. Go capture some!' : `No ${filter} activities found.`}
+                     </Text>
+                 </View>
+             )}
++
++            {/* Custom Popup Modal */}
++            <Modal visible={popup.visible} transparent animationType="fade" onRequestClose={hidePopup}>
++                <View style={styles.modalOverlay}>
++                    <View style={styles.modalCard}>
++                        <Text style={styles.modalTitle}>{popup.title}</Text>
++                        <Text style={styles.modalMessage}>{popup.message}</Text>
++                        <View style={styles.modalActions}>
++                            <TouchableOpacity style={styles.modalCancelBtn} onPress={hidePopup} activeOpacity={0.8}>
++                                <Text style={styles.modalCancelText}>{popup.onConfirm ? 'Cancel' : 'OK'}</Text>
++                            </TouchableOpacity>
++                            {popup.onConfirm && (
++                                <TouchableOpacity style={styles.modalDeleteBtn} onPress={popup.onConfirm} activeOpacity={0.85}>
++                                    <Ionicons name="trash-outline" size={14} color="#fff" />
++                                    <Text style={styles.modalDeleteText}>Delete</Text>
++                                </TouchableOpacity>
++                            )}
++                        </View>
++                    </View>
++                </View>
++            </Modal>
+         </View>
+     );
+ }
+@@ -250,79 +337,93 @@ const styles = StyleSheet.create({
+     },
+     headerTitle: { fontSize: 22, fontWeight: '800', color: '#fff' },
+     summaryRow: {
+-        flexDirection: 'row', marginHorizontal: 18, borderRadius: 16, backgroundColor: '#111528',
+-        paddingVertical: 16, marginBottom: 16,
++        flexDirection: 'row', marginHorizontal: 16, borderRadius: 16, backgroundColor: '#111528',
++        paddingVertical: 14, marginBottom: 14,
+         borderWidth: 1, borderColor: 'rgba(91,99,211,0.15)',
+-        alignItems: 'center', justifyContent: 'center',
++        alignItems: 'center',
+     },
+-    summaryItem: { alignItems: 'center', flex: 1, gap: 4 },
+-    summaryValue: { fontSize: 20, fontWeight: '800', color: '#fff' },
+-    summaryLabel: { fontSize: 11, color: '#888daf' },
+-    summaryDivider: { width: 1, height: 40, backgroundColor: 'rgba(91,99,211,0.2)' },
++    summaryItem: { alignItems: 'center', flex: 1, gap: 3 },
++    summaryValue: { fontSize: 17, fontWeight: '800', color: '#fff' },
++    summaryLabel: { fontSize: 10, color: '#888daf' },
++    summaryDivider: { width: 1, height: 38, backgroundColor: 'rgba(91,99,211,0.2)' },
++    sectionHeader: { marginBottom: 14 },
+     listTitle: { fontSize: 18, fontWeight: '700', color: '#fff', paddingHorizontal: 20, marginBottom: 10 },
+-    listContent: { paddingHorizontal: 16, paddingBottom: 100 },
++    filterRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 20 },
++    filterBtn: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
++    filterBtnActive: { backgroundColor: 'rgba(91,99,211,0.15)', borderColor: '#5B63D3' },
++    filterText: { color: '#888', fontSize: 13, fontWeight: '600' },
++    filterTextActive: { color: '#7C83ED' },
++    listContent: { paddingHorizontal: 14, paddingBottom: 110 },
+     card: {
+-        backgroundColor: '#111528', borderRadius: 16, padding: 16, marginBottom: 12,
++        backgroundColor: '#111528', borderRadius: 16, padding: 14, marginBottom: 10,
+         borderWidth: 1, borderColor: 'rgba(91,99,211,0.12)',
+     },
+-    cardTop: { flexDirection: 'row', gap: 14, marginBottom: 8, alignItems: 'center' },
++    cardTop: { flexDirection: 'row', gap: 12, marginBottom: 6, alignItems: 'flex-start' },
+     mapThumb: {
+-        width: 60, height: 60, borderRadius: 12, backgroundColor: 'rgba(91,99,211,0.08)',
+-        justifyContent: 'center', alignItems: 'center',
++        width: 66, height: 66, borderRadius: 14, backgroundColor: 'rgba(91,99,211,0.08)',
++        justifyContent: 'center', alignItems: 'center', overflow: 'hidden',
+     },
+     cardInfo: { flex: 1 },
+-    cardName: { fontSize: 16, fontWeight: '700', color: '#fff', marginBottom: 2 },
+-    cardArea: { fontSize: 13, color: '#888daf', marginBottom: 6 },
+-    badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+-    badge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
+-    badgeHigh: { backgroundColor: 'rgba(45,208,110,0.15)' },
+-    badgeMed: { backgroundColor: 'rgba(232,168,56,0.15)' },
+-    badgeLow: { backgroundColor: 'rgba(229,57,53,0.15)' },
+-    badgeText: { fontSize: 11, fontWeight: '600', color: '#ccc' },
+-    contestedText: { fontSize: 11, color: '#666' },
++    cardName: { fontSize: 15, fontWeight: '700', color: '#fff', marginBottom: 2 },
++    cardArea: { fontSize: 12, color: '#888daf', marginBottom: 4 },
++    badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+     modeBadge: {
+         backgroundColor: 'rgba(91,99,211,0.12)', borderRadius: 6,
+-        paddingHorizontal: 8, paddingVertical: 2,
++        paddingHorizontal: 7, paddingVertical: 2,
++    },
++    modeBadgeText: { fontSize: 10, fontWeight: '700', color: '#7C83ED', textTransform: 'uppercase' },
++    cardDist: { fontSize: 12, color: '#E8A838', fontWeight: '600' },
++    cardDur: { fontSize: 12, color: '#888daf' },
++    cardActions: { flexDirection: 'column', gap: 6, paddingTop: 2 },
++    expandBtn: {
++        width: 30, height: 30, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.05)',
++        justifyContent: 'center', alignItems: 'center',
+     },
+-    modeBadgeText: { fontSize: 10, fontWeight: '600', color: '#7C83ED', textTransform: 'uppercase' },
+-    dateRow: {
+-        flexDirection: 'row', alignItems: 'center', gap: 5,
+-        marginBottom: 10, paddingLeft: 4,
++    deleteBtn: {
++        width: 30, height: 30, borderRadius: 10, backgroundColor: 'rgba(229,57,53,0.08)',
++        justifyContent: 'center', alignItems: 'center',
+     },
+-    dateText: { fontSize: 11, color: '#888daf' },
++    dateRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8, paddingLeft: 2 },
++    dateText: { fontSize: 11, color: '#666' },
+     captureDetails: {
+         backgroundColor: 'rgba(91,99,211,0.04)', borderRadius: 12,
+-        padding: 12, marginBottom: 10,
++        padding: 12, marginTop: 4,
+     },
+-    detailGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between' },
++    detailGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'space-between', marginBottom: 10 },
+     detailItem: {
+-        width: '30%', alignItems: 'center', gap: 3,
+-        backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 10, paddingVertical: 10,
++        width: '31%', alignItems: 'center', gap: 3,
++        backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 10, paddingVertical: 9,
+     },
+-    detailValue: { fontSize: 14, fontWeight: '800', color: '#fff' },
++    detailValue: { fontSize: 13, fontWeight: '800', color: '#fff' },
+     detailLabel: { fontSize: 10, color: '#888daf' },
+-    cardMid: { marginBottom: 12 },
+-    midItem: {
+-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+-        marginBottom: 6,
+-    },
+-    midLabel: { color: '#888', fontSize: 12, fontWeight: '500', width: 80 },
+-    midValue: { color: '#ccc', fontSize: 13, fontWeight: '600' },
+-    durabilityBarBg: {
+-        flex: 1, height: 5, backgroundColor: 'rgba(255,255,255,0.1)',
+-        borderRadius: 3, marginHorizontal: 8,
+-    },
+-    durabilityBarFill: { height: 5, borderRadius: 3 },
+-    cardActions: { flexDirection: 'row', gap: 10 },
+-    historyBtn: {
+-        flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+-        gap: 6, paddingVertical: 10, borderRadius: 10,
+-        borderWidth: 1, borderColor: 'rgba(91,99,211,0.3)',
+-    },
+-    historyBtnText: { color: '#7C83ED', fontSize: 13, fontWeight: '600' },
+     launchBtn: {
+-        flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
++        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+         gap: 6, paddingVertical: 10, borderRadius: 10, backgroundColor: '#5B63D3',
+     },
+     launchBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
++    // Custom Modal Styles
++    modalOverlay: {
++        flex: 1, backgroundColor: 'rgba(0,0,0,0.7)',
++        justifyContent: 'center', alignItems: 'center', padding: 30,
++    },
++    modalCard: {
++        backgroundColor: '#1a1e32', borderRadius: 20, padding: 24,
++        width: '100%', maxWidth: 340,
++        borderWidth: 1, borderColor: 'rgba(91,99,211,0.2)',
++    },
++    modalTitle: { fontSize: 18, fontWeight: '800', color: '#fff', marginBottom: 10 },
++    modalMessage: { fontSize: 14, color: '#aaa', lineHeight: 20, marginBottom: 22 },
++    modalActions: { flexDirection: 'row', gap: 10 },
++    modalCancelBtn: {
++        flex: 1, paddingVertical: 12, borderRadius: 12,
++        backgroundColor: 'rgba(255,255,255,0.08)',
++        alignItems: 'center', justifyContent: 'center',
++    },
++    modalCancelText: { color: '#aaa', fontWeight: '700', fontSize: 14 },
++    modalDeleteBtn: {
++        flex: 1, paddingVertical: 12, borderRadius: 12,
++        backgroundColor: '#E53935', flexDirection: 'row',
++        alignItems: 'center', justifyContent: 'center', gap: 6,
++    },
++    modalDeleteText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+ });

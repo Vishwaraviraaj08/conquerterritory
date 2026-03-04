@@ -14,14 +14,15 @@ import {
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useScrollToTop } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../api';
 import UserProfileModal from '../components/UserProfileModal';
 import FriendRequestsModal from '../components/FriendRequestsModal';
 import { useNotifications } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
 
-const SCOPE_FILTERS = ['Local', 'State', 'Country', 'Global', 'Team'];
-const SCOPE_MAP = { Local: 'local', State: 'state', Country: 'country', Global: 'global', Team: 'team' };
+const SCOPE_FILTERS = ['Country', 'Global', 'Team'];
+const SCOPE_MAP = { Country: 'country', Global: 'global', Team: 'team' };
 
 const PERIOD_OPTIONS = [
     { label: 'Daily', value: 'daily' },
@@ -64,7 +65,16 @@ const SearchModal = ({ visible, onClose, onUserPress }) => {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState([]);
     const [loading, setLoading] = useState(false);
-    const { user } = useAuth(); // Assuming useAuth is available or passed down
+    // localPending stores userIds we've already sent requests to (persisted across restarts)
+    const [localPending, setLocalPending] = useState({});
+    const { user } = useAuth();
+
+    // Load persisted pending requests from AsyncStorage on mount
+    useEffect(() => {
+        AsyncStorage.getItem('pendingFriendRequests').then(raw => {
+            if (raw) setLocalPending(JSON.parse(raw));
+        }).catch(() => { });
+    }, []);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -77,7 +87,14 @@ const SearchModal = ({ visible, onClose, onUserPress }) => {
         setLoading(true);
         try {
             const res = await api.get('/users/search', { params: { q: query } });
-            setResults(res.data.users);
+            // Merge server relationship with local pending map
+            const enriched = (res.data.users || []).map(u => {
+                if (localPending[u._id] && u.relationship === 'none') {
+                    return { ...u, relationship: 'pending_sent' };
+                }
+                return u;
+            });
+            setResults(enriched);
         } catch (e) {
             console.log('Search error:', e);
         } finally {
@@ -88,7 +105,14 @@ const SearchModal = ({ visible, onClose, onUserPress }) => {
     const handleAddFriend = async (friendId) => {
         try {
             await api.post('/friends/request', { friendId });
-            alert('Friend request sent!');
+            // Persist the pending state locally
+            const updated = { ...localPending, [friendId]: true };
+            setLocalPending(updated);
+            await AsyncStorage.setItem('pendingFriendRequests', JSON.stringify(updated));
+            // Update UI immediately
+            setResults(prev => prev.map(u =>
+                u._id === friendId ? { ...u, relationship: 'pending_sent' } : u
+            ));
         } catch (e) {
             alert(e.response?.data?.error || 'Failed to send request');
         }
@@ -139,10 +163,22 @@ const SearchModal = ({ visible, onClose, onUserPress }) => {
                                     </View>
                                     {item._id !== user?._id && (
                                         <TouchableOpacity
-                                            style={{ marginTop: 4, backgroundColor: '#5B63D3', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}
-                                            onPress={() => handleAddFriend(item._id)}
+                                            style={[
+                                                { marginTop: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+                                                item.relationship === 'friends' ? { backgroundColor: '#4CAF50' }
+                                                    : item.relationship === 'pending_sent' ? { backgroundColor: '#E8A838' }
+                                                        : item.relationship === 'pending_received' ? { backgroundColor: '#E8A838' }
+                                                            : { backgroundColor: '#5B63D3' }
+                                            ]}
+                                            onPress={() => item.relationship === 'none' && handleAddFriend(item._id)}
+                                            disabled={item.relationship !== 'none'}
                                         >
-                                            <Text style={{ fontSize: 10, color: '#fff', fontWeight: 'bold' }}>ADD</Text>
+                                            <Text style={{ fontSize: 10, color: '#fff', fontWeight: 'bold' }}>
+                                                {item.relationship === 'friends' ? 'FRIENDS'
+                                                    : item.relationship === 'pending_sent' ? 'PENDING'
+                                                        : item.relationship === 'pending_received' ? 'ACCEPT'
+                                                            : 'ADD'}
+                                            </Text>
                                         </TouchableOpacity>
                                     )}
                                 </View>
@@ -299,17 +335,6 @@ export default function LeaderboardsScreen() {
                 </View>
             </View>
 
-            {/* Action buttons */}
-            <View style={styles.actionRow}>
-                <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8}>
-                    <Ionicons name="flag-outline" size={16} color="#fff" />
-                    <Text style={styles.actionBtnText}>Challenge Invite</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8}>
-                    <Ionicons name="people-outline" size={16} color="#fff" />
-                    <Text style={styles.actionBtnText}>Join Team Event</Text>
-                </TouchableOpacity>
-            </View>
 
             {/* Leaderboard List */}
             {loading ? (

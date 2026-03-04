@@ -32,18 +32,17 @@ const StatBox = ({ icon, value, label, color }) => (
     </View>
 );
 
-// Mock Achievements Data (In a real app, this might come from the backend or be merged)
 const ALL_ACHIEVEMENTS = [
-    { id: 'first_step', title: 'First Step', description: 'Take your first step.', icon: 'walk' },
-    { id: '1km_walk', title: '1km Walker', description: 'Walk a total of 1 kilometer.', icon: 'map-marker-distance' },
-    { id: '5km_runner', title: '5km Runner', description: 'Run a total of 5 kilometers.', icon: 'run' },
-    { id: 'territory_claimer', title: 'Land Owner', description: 'Claim your first territory.', icon: 'flag-variant' },
-    { id: 'social_butterfly', title: 'Social Butterfly', description: 'Add a friend.', icon: 'account-multiple-plus' },
-    { id: 'night_owl', title: 'Night Owl', description: 'Complete a capture after 10 PM.', icon: 'weather-night' },
-    { id: 'early_bird', title: 'Early Bird', description: 'Complete a capture before 7 AM.', icon: 'weather-sunset-up' },
-    { id: 'week_streak', title: 'Consistency', description: 'Maintain a 7-day streak.', icon: 'fire' },
-    { id: 'marathoner', title: 'Marathoner', description: 'Walk 42km in total.', icon: 'run-fast' },
-    { id: 'explorer', title: 'Explorer', description: 'Visit 10 different territories.', icon: 'compass' },
+    { id: 'first_step', title: 'First Step', description: 'Take your first step.', icon: 'walk', targetValue: 1, getStat: (s) => s.steps || 0 },
+    { id: '1km_walk', title: '1km Walker', description: 'Walk a total of 1 kilometer.', icon: 'map-marker-distance', targetValue: 1000, getStat: (s) => s.totalDistance || 0 },
+    { id: '5km_runner', title: '5km Runner', description: 'Run a total of 5 kilometers.', icon: 'run', targetValue: 5000, getStat: (s) => s.totalDistance || 0 },
+    { id: 'territory_claimer', title: 'Land Owner', description: 'Claim your first territory.', icon: 'flag-variant', targetValue: 1, getStat: (s) => s.totalCaptures || 0 },
+    { id: 'social_butterfly', title: 'Social Butterfly', description: 'Add a friend.', icon: 'account-multiple-plus', targetValue: 1, getStat: (s, p) => p.friendsCount || 0 },
+    { id: 'week_streak', title: 'Consistency', description: 'Maintain a 7-day streak.', icon: 'fire', targetValue: 7, getStat: (s) => s.streak || 0 },
+    { id: 'marathoner', title: 'Marathoner', description: 'Walk 42km in total.', icon: 'run-fast', targetValue: 42000, getStat: (s) => s.totalDistance || 0 },
+    { id: 'explorer', title: 'Explorer', description: 'Complete 10 runs.', icon: 'compass', targetValue: 10, getStat: (s) => s.totalRuns || 0 },
+    { id: 'calorie_crusher', title: 'Calorie Crusher', description: 'Burn 5,000 calories.', icon: 'lightning-bolt', targetValue: 5000, getStat: (s) => s.caloriesBurned || 0 },
+    { id: 'land_baron', title: 'Land Baron', description: 'Claim 50,000 m² territory.', icon: 'earth', targetValue: 50000, getStat: (s) => s.totalArea || 0 },
 ];
 
 export default function ProfileScreen() {
@@ -90,10 +89,43 @@ export default function ProfileScreen() {
 
     const fetchProfile = useCallback(async () => {
         try {
-            const res = await api.get('/users/profile');
-            setProfile(res.data.user);
+            const [profRes, capRes] = await Promise.all([
+                api.get('/users/profile'),
+                api.get('/captures?limit=500')
+            ]);
+            const userData = profRes.data.user;
+            const caps = capRes.data.captures || [];
+
+            // Compute live stats from actual captures
+            const liveDist = caps.reduce((a, c) => a + (c.distance || 0), 0);
+            const liveCals = caps.reduce((a, c) => a + (c.calories || 0), 0);
+            const liveSteps = caps.reduce((a, c) => a + Math.floor((c.distance || 0) / 0.762), 0);
+            const liveArea = caps.reduce((a, c) => a + (c.area || 0), 0);
+            const liveTerritories = caps.filter(c => c.area > 0).length;
+            const liveRuns = caps.length;
+
+            // Merge live stats into profile (prefer computed over stale DB values)
+            const mergedStats = {
+                ...(userData.stats || {}),
+                totalDistance: liveDist,
+                caloriesBurned: liveCals,
+                steps: liveSteps,
+                totalArea: liveArea,
+                totalCaptures: liveTerritories,
+                totalRuns: liveRuns,
+            };
+
+            // Recalculate health score with live data
+            let hs = 50;
+            hs += Math.min(liveSteps / 1000, 20);
+            hs += Math.min(liveDist / 5000, 15);
+            hs += Math.min(liveCals / 500, 10);
+            hs += Math.min(mergedStats.streak || 0, 5);
+            mergedStats.healthScore = Math.min(Math.round(hs), 100);
+
+            setProfile({ ...userData, stats: mergedStats });
         } catch (e) {
-            console.log('Profile fetch error, using local user');
+            console.log('Profile fetch error, using local user:', e.message);
             setProfile(user);
         } finally {
             setLoading(false);
@@ -133,7 +165,8 @@ export default function ProfileScreen() {
             return {
                 ...ach,
                 unlocked: !!unlocked,
-                unlockedAt: unlocked ? unlocked.unlockedAt : null
+                unlockedAt: unlocked ? unlocked.unlockedAt : null,
+                currentValue: ach.getStat ? ach.getStat(stats, p) : 0
             };
         });
 
@@ -225,10 +258,12 @@ export default function ProfileScreen() {
                 {/* Key Statistics */}
                 <Text style={styles.sectionTitle}>Key Statistics</Text>
                 <View style={styles.statsGrid}>
-                    <StatBox icon="vector-polygon" value={stats.totalArea ? `${Math.round(stats.totalArea)} m²` : "0 m²"} label="Area Claimed" color="#5B63D3" />
-                    <StatBox icon="run-fast" value={stats.totalDistance ? `${(stats.totalDistance / 1000).toFixed(1)} km` : "0 km"} label="Distance" color="#E8A838" />
+                    <StatBox icon="vector-polygon" value={stats.totalArea ? `${Math.round(stats.totalArea)} m²` : '0 m²'} label="Area Claimed" color="#5B63D3" />
+                    <StatBox icon="run-fast" value={stats.totalDistance ? `${(stats.totalDistance / 1000).toFixed(1)} km` : '0 km'} label="Distance" color="#E8A838" />
                     <StatBox icon="fire" value={`${(stats.caloriesBurned || 0).toLocaleString()}`} label="Calories" color="#E53935" />
                     <StatBox icon="chart-line" value={`${stats.streak || 0} days`} label="Streak" color="#2dd06e" />
+                    <StatBox icon="earth" value={`${stats.totalCaptures || 0}`} label="Territories" color="#7C83ED" />
+                    <StatBox icon="shoe-print" value={`${(stats.steps || 0).toLocaleString()}`} label="Steps" color="#9C27B0" />
                 </View>
 
                 {/* Achievements Section */}
@@ -267,6 +302,22 @@ export default function ProfileScreen() {
                             <View style={styles.achievementInfo}>
                                 <Text style={[styles.achievementTitle, !ach.unlocked && styles.textDim]}>{ach.title}</Text>
                                 <Text style={[styles.achievementDesc, !ach.unlocked && styles.textDim]}>{ach.description}</Text>
+
+                                {!ach.unlocked && ach.targetValue && ach.currentValue !== undefined && (
+                                    <View style={{ marginTop: 8 }}>
+                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                                            <Text style={{ fontSize: 10, color: '#888daf' }}>Progress</Text>
+                                            <Text style={{ fontSize: 10, color: '#888daf' }}>
+                                                {typeof ach.currentValue === 'number' && ach.targetValue >= 1000
+                                                    ? `${(ach.currentValue / 1000).toFixed(1)}k / ${(ach.targetValue / 1000).toFixed(1)}k`
+                                                    : `${Math.round(ach.currentValue)} / ${ach.targetValue}`}
+                                            </Text>
+                                        </View>
+                                        <View style={{ height: 4, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 2 }}>
+                                            <View style={{ height: 4, backgroundColor: '#5B63D3', borderRadius: 2, width: `${Math.min(100, Math.max(0, (ach.currentValue / ach.targetValue) * 100))}%` }} />
+                                        </View>
+                                    </View>
+                                )}
                             </View>
                             <MaterialCommunityIcons
                                 name={ach.unlocked ? "check-circle" : "checkbox-blank-circle-outline"}

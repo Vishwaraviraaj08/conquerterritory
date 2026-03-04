@@ -1,0 +1,268 @@
+﻿commit a8b3a4d6ac4f9458df2bce21a38832a9853b0851
+Author: Vishwaraviraaj08 <vishwaraviraaj08@gmail.com>
+Date:   Sat Feb 14 15:57:03 2026 +0530
+
+    copleted completely saturdaye evning
+
+diff --git a/src/screens/SplashScreen.js b/src/screens/SplashScreen.js
+new file mode 100644
+index 0000000..76ee8d0
+--- /dev/null
++++ b/src/screens/SplashScreen.js
+@@ -0,0 +1,256 @@
++import React, { useEffect, useRef, useState } from 'react';
++import Svg, { Polygon, Defs, LinearGradient as SvgGradient, Stop, G, Path } from 'react-native-svg';
++import { StyleSheet, View, Text, Animated, Dimensions, Easing, Image } from 'react-native';
++import { LinearGradient } from 'expo-linear-gradient';
++import { StatusBar } from 'expo-status-bar';
++
++const { width, height } = Dimensions.get('window');
++
++// Luxury color palette
++const COLORS = {
++    background: ['#050811', '#0a0e1a', '#111528'],
++    primary: '#5B63D3',
++    accent: '#7C83ED',
++    gold: '#FFD700', // Royal touch
++    text: '#ffffff'
++};
++
++export default function SplashScreen({ onFinish }) {
++    const [animationFinished, setAnimationFinished] = useState(false);
++
++    // Animation Values
++    const opacityAnim = useRef(new Animated.Value(0)).current;
++    const scaleAnim = useRef(new Animated.Value(0.3)).current;
++    const translateYAnim = useRef(new Animated.Value(50)).current;
++    const textLetterSpacing = useRef(new Animated.Value(0)).current;
++
++    // Background Pulse
++    const bgScale = useRef(new Animated.Value(1)).current;
++
++    useEffect(() => {
++        startAnimations();
++    }, []);
++
++    const startAnimations = () => {
++        // parallel entry animation
++        Animated.sequence([
++            // 1. Jump In & Fade In
++            Animated.parallel([
++                Animated.timing(opacityAnim, {
++                    toValue: 1,
++                    duration: 800,
++                    useNativeDriver: true,
++                    easing: Easing.out(Easing.back(1.5)),
++                }),
++                Animated.spring(scaleAnim, {
++                    toValue: 1,
++                    friction: 6,
++                    tension: 40,
++                    useNativeDriver: true,
++                }),
++                Animated.timing(translateYAnim, {
++                    toValue: 0,
++                    duration: 800,
++                    useNativeDriver: true,
++                    easing: Easing.out(Easing.cubic),
++                }),
++            ]),
++
++            // 2. Elegant Pulse / Zoom Effect (Royal feel)
++            Animated.parallel([
++                Animated.timing(textLetterSpacing, {
++                    toValue: 5,
++                    duration: 1500,
++                    useNativeDriver: false, // Text style props often don't support native driver
++                    easing: Easing.inOut(Easing.ease),
++                }),
++                Animated.loop(
++                    Animated.sequence([
++                        Animated.timing(bgScale, { toValue: 1.1, duration: 2000, useNativeDriver: true }),
++                        Animated.timing(bgScale, { toValue: 1, duration: 2000, useNativeDriver: true }),
++                    ])
++                ).start(),
++            ]),
++        ]).start();
++
++        // 3. Exit Sequence after distinct delay
++        setTimeout(() => {
++            exitAnimation();
++        }, 2500); // Wait for user to enable "wow" factor
++    };
++
++    const exitAnimation = () => {
++        Animated.parallel([
++            // Zoom OUT logo rapidly or Zoom IN to fill? 
++            // "Zoom in, Zoom out" requested. Let's do a quick shrink then massive expansion (Zoom In) to clear.
++            Animated.sequence([
++                Animated.timing(scaleAnim, {
++                    toValue: 0.8,
++                    duration: 200,
++                    useNativeDriver: true,
++                    easing: Easing.in(Easing.ease),
++                }),
++                Animated.timing(scaleAnim, {
++                    toValue: 20, // Massive Zoom In to fill screen
++                    duration: 600,
++                    useNativeDriver: true,
++                    easing: Easing.in(Easing.poly(4)),
++                }),
++            ]),
++            Animated.timing(opacityAnim, {
++                toValue: 0,
++                duration: 500,
++                delay: 200,
++                useNativeDriver: true,
++            })
++        ]).start(() => {
++            setAnimationFinished(true);
++            if (onFinish) onFinish();
++        });
++    };
++
++    return (
++        <View style={styles.container}>
++            <StatusBar style="light" />
++
++            {/* Animated Background */}
++            <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale: bgScale }] }]}>
++                <LinearGradient
++                    colors={COLORS.background}
++                    style={StyleSheet.absoluteFill}
++                    start={{ x: 0.5, y: 0 }}
++                    end={{ x: 0.5, y: 1 }}
++                />
++            </Animated.View>
++
++            {/* Main Content */}
++            <View style={styles.contentContainer}>
++
++                {/* Logo / Icon Area */}
++                <Animated.View
++                    style={[
++                        styles.logoContainer,
++                        {
++                            opacity: opacityAnim,
++                            transform: [
++                                { scale: scaleAnim },
++                                { translateY: translateYAnim }
++                            ]
++                        }
++                    ]}
++                >
++                    <View style={styles.iconCircle}>
++                        {/* Luxury Octagon Icon constructed with SVG */}
++                        <Svg height="140" width="140" viewBox="0 0 100 100">
++                            <Defs>
++                                <SvgGradient id="grad" x1="0" y1="0" x2="1" y2="1">
++                                    <Stop offset="0" stopColor="#8A2BE2" stopOpacity="1" />
++                                    <Stop offset="1" stopColor="#5B63D3" stopOpacity="1" />
++                                </SvgGradient>
++                                <SvgGradient id="goldGrad" x1="0" y1="0" x2="1" y2="0">
++                                    <Stop offset="0" stopColor="#FFD700" stopOpacity="1" />
++                                    <Stop offset="1" stopColor="#FFA500" stopOpacity="1" />
++                                </SvgGradient>
++                            </Defs>
++
++                            {/* Octagon Background (Purple) */}
++                            <Polygon
++                                points="30,0 70,0 100,30 100,70 70,100 30,100 0,70 0,30"
++                                fill="url(#grad)"
++                                stroke="url(#goldGrad)"
++                                strokeWidth="2"
++                            />
++
++                            {/* Inner White Grid/Globe Lines (Abstract) */}
++                            <G scale="0.8" x="10" y="10" opacity="0.4">
++                                <Path d="M50 0 L50 100 M0 50 L100 50" stroke="white" strokeWidth="1" />
++                                <Path d="M15 15 L85 85 M85 15 L15 85" stroke="white" strokeWidth="1" />
++                                <Polygon points="50,10 90,50 50,90 10,50" fill="none" stroke="white" strokeWidth="1" />
++                            </G>
++
++                            {/* Center Conquest Symbol (White) */}
++                            <G scale="0.5" x="25" y="25">
++                                <Path
++                                    d="M50 0 L100 50 L50 100 L0 50 Z"
++                                    fill="none"
++                                    stroke="white"
++                                    strokeWidth="6"
++                                />
++                                <Path
++                                    d="M50 20 L80 50 L50 80 L20 50 Z"
++                                    fill="white"
++                                />
++                            </G>
++                        </Svg>
++                    </View>
++                </Animated.View>
++
++                {/* Text Title */}
++                <Animated.View style={{ opacity: opacityAnim, marginTop: 40, alignItems: 'center' }}>
++                    <Animated.Text style={[styles.title, { letterSpacing: textLetterSpacing }]}>
++                        GEO CONQUEST
++                    </Animated.Text>
++                    <View style={styles.separator} />
++                    <Animated.Text style={styles.subtitle}>
++                        "The world isnΓÇÖt explored. ItΓÇÖs conquered."
++                    </Animated.Text>
++                </Animated.View>
++            </View>
++        </View>
++    );
++}
++
++const styles = StyleSheet.create({
++    container: {
++        flex: 1,
++        backgroundColor: '#050811',
++        justifyContent: 'center',
++        alignItems: 'center',
++        overflow: 'hidden',
++    },
++    contentContainer: {
++        alignItems: 'center',
++        justifyContent: 'center',
++        zIndex: 10,
++    },
++    logoContainer: {
++        shadowColor: '#5B63D3',
++        shadowOffset: { width: 0, height: 0 },
++        shadowOpacity: 0.8,
++        shadowRadius: 40,
++        elevation: 25,
++    },
++    iconCircle: {
++        width: 140,
++        height: 140,
++        justifyContent: 'center',
++        alignItems: 'center',
++        // Removed borders as SVG handles the shape
++    },
++    title: {
++        fontSize: 34, // Adjusted size
++        fontWeight: '900',
++        color: '#fff',
++        textAlign: 'center',
++        textShadowColor: 'rgba(138, 43, 226, 0.5)',
++        textShadowOffset: { width: 0, height: 2 },
++        textShadowRadius: 10,
++    },
++    separator: {
++        width: 60,
++        height: 3,
++        backgroundColor: '#FFD700', // Gold separator
++        marginTop: 10,
++        marginBottom: 10,
++        borderRadius: 2,
++    },
++    subtitle: {
++        fontSize: 13,
++        fontWeight: '500',
++        color: '#a0a3bd',
++        textAlign: 'center',
++        fontStyle: 'italic',
++        maxWidth: '85%',
++        marginTop: 5,
++    }
++});

@@ -251,65 +251,109 @@ const getMapHtml = () => `
             map.flyTo({ center: [currentLng, currentLat], zoom: is3D ? 18 : 16, pitch: is3D ? 60 : 0, duration: 1000 });
         }
 
-        function addTerritories(territories) {
-            // Remove old layers/sources
+        function getDistinctColor(str, opacity) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = str.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            const hue = Math.abs(hash) % 360;
+            return 'hsla(' + hue + ', 72%, 55%, ' + opacity + ')';
+        }
+
+        // Clear all territory and path layers
+        function clearCaptureLayers() {
             territoryLayers.forEach(function(id) {
-                if (map.getLayer(id + '-fill')) map.removeLayer(id + '-fill');
-                if (map.getLayer(id + '-line')) map.removeLayer(id + '-line');
-                if (map.getSource(id)) map.removeSource(id);
+                try {
+                    if (map.getLayer(id + '-fill')) map.removeLayer(id + '-fill');
+                    if (map.getLayer(id + '-line')) map.removeLayer(id + '-line');
+                    if (map.getLayer(id + '-path')) map.removeLayer(id + '-path');
+                    if (map.getSource(id)) map.removeSource(id);
+                } catch(e) {}
             });
             territoryLayers = [];
             territoryData = {};
+        }
 
+        // Draw captured territories (filled polygon) AND attempted paths (dashed line)
+        function addCaptures(captures) {
+            clearCaptureLayers();
+
+            captures.forEach(function(t, i) {
+                var srcId = 'capture-' + i;
+                territoryLayers.push(srcId);
+                territoryData[srcId] = t;
+
+                var ownerId = t.ownerId || 'system';
+                var isMine = t.isMine;
+                var fillColor = isMine ? 'rgba(91,99,211,0.35)' : getDistinctColor(ownerId, 0.3);
+                var lineColor = isMine ? '#7C83ED' : getDistinctColor(ownerId, 1.0);
+
+                // ---- CAPTURED TERRITORY: filled polygon ----
+                if (t.hasTerritory) {
+                    var polyCoords = t.coordinates && t.coordinates.coordinates ? t.coordinates.coordinates : null;
+                    if (polyCoords && polyCoords[0] && polyCoords[0].length >= 3) {
+                        try {
+                            map.addSource(srcId, {
+                                type: 'geojson',
+                                data: { type: 'Feature', properties: { id: srcId }, geometry: { type: 'Polygon', coordinates: polyCoords } }
+                            });
+                            map.addLayer({ id: srcId + '-fill', type: 'fill', source: srcId, paint: { 'fill-color': fillColor } });
+                            map.addLayer({ id: srcId + '-line', type: 'line', source: srcId, paint: { 'line-color': lineColor, 'line-width': 2 } });
+                            map.on('click', srcId + '-fill', function() {
+                                var td = territoryData[srcId];
+                                window.ReactNativeWebView.postMessage(JSON.stringify({
+                                    type: 'TERRITORY_TAP',
+                                    territory: { id: td._id, name: td.name || 'Territory', area: td.area || 0,
+                                        capturedAt: td.capturedAt, owner: td.ownerName || 'You',
+                                        distance: td.captureDistance || 0, duration: td.captureDuration || 0, avgSpeed: td.captureAvgSpeed || 0 }
+                                }));
+                            });
+                        } catch(e) {}
+                    }
+                } else {
+                    // ---- ATTEMPTED RUN: dashed path line ----
+                    var pathCoords = t.path && t.path.coordinates ? t.path.coordinates : null;
+                    if (pathCoords && pathCoords.length >= 2) {
+                        try {
+                            map.addSource(srcId, {
+                                type: 'geojson',
+                                data: { type: 'Feature', geometry: { type: 'LineString', coordinates: pathCoords } }
+                            });
+                            map.addLayer({
+                                id: srcId + '-path', type: 'line', source: srcId,
+                                paint: { 'line-color': lineColor, 'line-width': 2.5, 'line-dasharray': [3, 2], 'line-opacity': 0.75 }
+                            });
+                        } catch(e) {}
+                    }
+                }
+            });
+        }
+
+        function addTerritories(territories) {
+            clearCaptureLayers();
             territories.forEach(function(t, i) {
                 var srcId = 'territory-' + i;
                 territoryLayers.push(srcId);
                 territoryData[srcId] = t;
-
                 var coords = t.coordinates && t.coordinates.coordinates ? t.coordinates.coordinates : t.polygon;
                 if (!coords || !coords[0] || coords[0].length < 3) return;
-
-                map.addSource(srcId, {
-                    type: 'geojson',
-                    data: {
-                        type: 'Feature',
-                        properties: { id: srcId },
-                        geometry: { type: 'Polygon', coordinates: coords }
-                    }
-                });
-
-                map.addLayer({
-                    id: srcId + '-fill', type: 'fill', source: srcId,
-                    paint: {
-                        'fill-color': t.isMine ? 'rgba(91,99,211,0.3)' : 'rgba(232,168,56,0.2)',
-                        'fill-outline-color': t.isMine ? '#5B63D3' : '#E8A838'
-                    }
-                });
-                map.addLayer({
-                    id: srcId + '-line', type: 'line', source: srcId,
-                    paint: {
-                        'line-color': t.isMine ? '#7C83ED' : '#E8A838',
-                        'line-width': 2
-                    }
-                });
-
-                map.on('click', srcId + '-fill', function(e) {
-                    var td = territoryData[srcId];
-                    window.ReactNativeWebView.postMessage(JSON.stringify({
-                        type: 'TERRITORY_TAP',
-                        territory: {
-                            id: td._id || srcId,
-                            name: td.name || 'Territory',
-                            area: td.area || 0,
-                            capturedAt: td.capturedAt || '',
-                            gameMode: td.gameMode || 'solo',
-                            owner: td.ownerName || 'You',
-                            distance: td.captureDistance || 0,
-                            duration: td.captureDuration || 0,
-                            avgSpeed: td.captureAvgSpeed || 0,
-                        }
-                    }));
-                });
+                var ownerId = t.ownerId || t.ownerName || 'other';
+                var fillColor = t.isMine ? 'rgba(91,99,211,0.3)' : getDistinctColor(ownerId, 0.3);
+                var outlineColor = t.isMine ? '#5B63D3' : getDistinctColor(ownerId, 0.8);
+                try {
+                    map.addSource(srcId, { type: 'geojson', data: { type: 'Feature', properties: { id: srcId }, geometry: { type: 'Polygon', coordinates: coords } } });
+                    map.addLayer({ id: srcId + '-fill', type: 'fill', source: srcId, paint: { 'fill-color': fillColor, 'fill-outline-color': outlineColor } });
+                    map.addLayer({ id: srcId + '-line', type: 'line', source: srcId, paint: { 'line-color': outlineColor, 'line-width': 2 } });
+                    map.on('click', srcId + '-fill', function(e) {
+                        var td = territoryData[srcId];
+                        window.ReactNativeWebView.postMessage(JSON.stringify({
+                            type: 'TERRITORY_TAP',
+                            territory: { id: td._id || srcId, name: td.name || 'Territory', area: td.area || 0,
+                                capturedAt: td.capturedAt || '', gameMode: td.gameMode || 'solo', owner: td.ownerName || 'You',
+                                distance: td.captureDistance || 0, duration: td.captureDuration || 0, avgSpeed: td.captureAvgSpeed || 0 }
+                        }));
+                    });
+                } catch(e) {}
             });
         }
 
@@ -334,6 +378,7 @@ const getMapHtml = () => `
                 else if (d.type === 'TOGGLE_3D') toggle3D(d.enable);
                 else if (d.type === 'CENTER') centerOnUser();
                 else if (d.type === 'UPDATE_PEERS') updatePeers(d.peers);
+                else if (d.type === 'ADD_CAPTURES') addCaptures(d.captures);
                 else if (d.type === 'ADD_TERRITORIES') addTerritories(d.territories);
             } catch(e) {
                 // window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ERROR', message: 'Msg Parse Error: ' + e.message }));
@@ -379,25 +424,56 @@ export default function HomeScreen({ navigation }) {
         })();
     }, []);
 
-    // Fetch territories from server
+    // Fetch captures (territories + attempted runs) from server
     const loadTerritories = useCallback(async () => {
         try {
-            const res = await api.get('/territories');
-            const terrs = (res.data.territories || []).map(t => ({
-                ...t,
-                isMine: true,
-                ownerName: user?.username || 'You',
-                captureDistance: t.capture?.distance || 0,
-                captureDuration: t.capture?.duration || 0,
-                captureAvgSpeed: t.capture?.avgSpeed || 0,
-            }));
-            setTerritories(terrs);
-        } catch (e) { }
-    }, [user]);
+            const endpoint = publicSession ? '/captures/public' : '/captures';
+            const res = await api.get(endpoint);
+            const capturesRaw = res.data.captures || [];
+            const myId = user?.id || user?._id;
+
+            const mapData = capturesRaw.map(c => {
+                const userId = c.user?._id || c.user || '';
+                const isMine = userId === myId;
+                const ownerName = c.user?.username || (isMine ? user?.username : 'Unknown');
+                const ownerId = userId || 'system';
+                const hasTerritory = c.territory != null;
+
+                return {
+                    _id: hasTerritory ? c.territory._id : c._id,
+                    name: hasTerritory ? c.territory.name : 'Attempted Run',
+                    area: hasTerritory ? (c.territory.area || 0) : 0,
+                    capturedAt: hasTerritory ? c.territory.capturedAt : c.capturedAt,
+                    coordinates: hasTerritory ? c.territory.coordinates : null,
+                    path: c.path || null,   // raw LineString path for attempted runs
+                    hasTerritory,
+                    isMine,
+                    ownerName,
+                    ownerId,
+                    captureDistance: c.distance || 0,
+                    captureDuration: c.duration || 0,
+                    captureAvgSpeed: c.avgSpeed || 0,
+                };
+            });
+
+            setTerritories(mapData.filter(t => t.hasTerritory));
+
+            // Send all (territories + attempts) to the map WebView
+            if (webViewRef.current) {
+                webViewRef.current.postMessage(JSON.stringify({
+                    type: 'ADD_CAPTURES',
+                    captures: mapData
+                }));
+            }
+        } catch (e) {
+            console.error('Error loading territories:', e);
+        }
+    }, [user, publicSession]);
 
     useEffect(() => {
         loadTerritories();
     }, [loadTerritories]);
+
 
     // Poll for active sessions (Real-Time Multiplayer)
     useEffect(() => {
@@ -421,27 +497,32 @@ export default function HomeScreen({ navigation }) {
         return () => clearInterval(interval);
     }, [publicSession, mapReady]);
 
-    // Send territories to map when ready
+    // When map becomes ready, (re)load and push all captures to it
     useEffect(() => {
-        if (mapReady && webViewRef.current && territories.length > 0) {
-            webViewRef.current.postMessage(JSON.stringify({
-                type: 'ADD_TERRITORIES',
-                territories: territories,
-            }));
+        if (mapReady) {
+            loadTerritories();
         }
-    }, [mapReady, territories]);
+    }, [mapReady]);
 
     useEffect(() => {
-        (async () => {
-            const hasPermission = await requestLocationPermissions();
-            if (!hasPermission) return;
+        fetchLocation();
+        return () => {
+            if (watchRef.current) watchRef.current.remove();
+        };
+    }, []);
 
+    const fetchLocation = async () => {
+        const hasPermission = await requestLocationPermissions();
+        if (!hasPermission) return;
+
+        try {
             const loc = await Location.getCurrentPositionAsync({
                 accuracy: Location.Accuracy.High
             });
             setLocation(loc.coords);
             locationRef.current = loc.coords;
 
+            if (watchRef.current) watchRef.current.remove();
             watchRef.current = await Location.watchPositionAsync(
                 { accuracy: Location.Accuracy.High, timeInterval: 3000, distanceInterval: 5 },
                 (newLoc) => {
@@ -449,16 +530,10 @@ export default function HomeScreen({ navigation }) {
                     locationRef.current = newLoc.coords;
                 }
             );
-        })();
-
-        return () => {
-            if (watchRef.current) {
-                watchRef.current.remove();
-                watchRef.current = null;
-            }
-        };
-    }, []);
-
+        } catch (error) {
+            console.warn("Error fetching location:", error);
+        }
+    };
     useEffect(() => {
         if (location && mapReady && webViewRef.current) {
             webViewRef.current.postMessage(JSON.stringify({
@@ -503,50 +578,49 @@ export default function HomeScreen({ navigation }) {
         return `${m}m ${s}s`;
     };
 
-    if (!location) {
-        return (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#5B63D3" />
-                <Text style={styles.loadingText}>Locating you...</Text>
-            </View>
-        );
-    }
+    const reloadMap = () => {
+        setWebviewKey(prev => prev + 1);
+        setMapReady(false);
+        fetchLocation();
+        loadTerritories();
+    };
 
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
-            <WebView
-                key={webviewKey}
-                ref={webViewRef}
-                originWhitelist={['*']}
-                source={{ html: getMapHtml(), baseUrl: '' }} // Added baseUrl
-                style={styles.map}
-                javaScriptEnabled={true}
-                domStorageEnabled={true}
-                androidLayerType="hardware"
-                startInLoadingState={true}
-                mixedContentMode="always"
-                allowFileAccess={true}
-                renderLoading={() => (
-                    <View style={styles.mapLoadingOverlay}>
-                        <ActivityIndicator size="large" color="#5B63D3" />
-                        <Text style={styles.loadingText}>Loading Map...</Text>
-                    </View>
-                )}
-                onMessage={(event) => {
-                    try {
-                        const data = JSON.parse(event.nativeEvent.data);
-                        if (data.type === 'MAP_READY') {
-                            setMapReady(true);
-                            console.log('Map Rendered');
-                        }
-                        else if (data.type === '3D_CHANGED') setIs3D(data.is3D);
-                        else if (data.type === 'TERRITORY_TAP') {
-                            setSelectedTerritory(data.territory);
-                        }
-                    } catch (e) { }
-                }}
-            />
+            {!location ? (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#00e5ff" />
+                    <Text style={styles.loadingText}>Locating you...</Text>
+                    <TouchableOpacity style={styles.retryBtn} onPress={fetchLocation}>
+                        <Ionicons name="refresh" size={16} color="#0a0e1a" />
+                        <Text style={styles.retryBtnText}>Retry</Text>
+                    </TouchableOpacity>
+                </View>
+            ) : (
+                <WebView
+                    key={webviewKey}
+                    ref={webViewRef}
+                    originWhitelist={['*']}
+                    source={{ html: getMapHtml() }}
+                    style={styles.webview}
+                    javaScriptEnabled={true}
+                    domStorageEnabled={true}
+                    onMessage={(event) => {
+                        try {
+                            const data = JSON.parse(event.nativeEvent.data);
+                            if (data.type === 'MAP_READY') {
+                                setMapReady(true);
+                                console.log('Map Rendered');
+                            }
+                            else if (data.type === '3D_CHANGED') setIs3D(data.is3D);
+                            else if (data.type === 'TERRITORY_TAP') {
+                                setSelectedTerritory(data.territory);
+                            }
+                        } catch (e) { }
+                    }}
+                />
+            )}
 
             {/* Top Header */}
             <View style={styles.topHeader}>
@@ -605,10 +679,7 @@ export default function HomeScreen({ navigation }) {
                 </TouchableOpacity>
                 <TouchableOpacity
                     style={styles.mapCtrlBtn}
-                    onPress={() => {
-                        setMapReady(false);
-                        setWebviewKey(prev => prev + 1); // Force reload
-                    }}
+                    onPress={reloadMap}
                 >
                     <Ionicons name="refresh" size={20} color="#fff" />
                 </TouchableOpacity>
@@ -686,6 +757,11 @@ export default function HomeScreen({ navigation }) {
                         <View style={styles.popupDivider} />
 
                         <View style={styles.popupRow}>
+                            <Ionicons name="person-outline" size={16} color="#7C83ED" />
+                            <Text style={styles.popupLabel}>Owner</Text>
+                            <Text style={styles.popupValue}>{selectedTerritory?.ownerName || 'You'}</Text>
+                        </View>
+                        <View style={styles.popupRow}>
                             <Ionicons name="calendar-outline" size={16} color="#7C83ED" />
                             <Text style={styles.popupLabel}>Date</Text>
                             <Text style={styles.popupValue}>{formatDate(selectedTerritory?.capturedAt)}</Text>
@@ -735,7 +811,7 @@ export default function HomeScreen({ navigation }) {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#0a0e1a' },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0e1a' },
-    loadingText: { marginTop: 10, fontSize: 14, color: '#888', fontWeight: '500' },
+    loadingText: { color: '#00e5ff', marginTop: 15, fontSize: 16, fontWeight: '600', letterSpacing: 1 },
     map: { flex: 1 },
     mapLoadingOverlay: {
         ...StyleSheet.absoluteFillObject,

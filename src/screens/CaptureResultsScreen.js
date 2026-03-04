@@ -178,7 +178,7 @@ export default function CaptureResultsScreen({ navigation, route }) {
                 </View>
 
                 <TouchableOpacity style={[styles.confirmBtn, saving && { opacity: 0.7 }]} onPress={handleConfirm} activeOpacity={0.85} disabled={saving}>
-                    {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmBtnText}>{saved ? 'Go Home' : (isCapture ? 'Confirm Capture' : 'Save Activity')}</Text>}
+                    {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmBtnText}>{saved ? 'View Territories' : (isCapture ? 'Confirm Capture' : 'Save Activity')}</Text>}
                 </TouchableOpacity>
 
                 <View style={styles.secondaryBtns}>

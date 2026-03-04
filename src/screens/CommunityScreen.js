@@ -21,6 +21,7 @@ import * as Clipboard from 'expo-clipboard';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import Svg, { Circle, Path, Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 // Custom Animated Empty State
 const AnimatedEmptyState = () => {
@@ -124,6 +125,7 @@ export default function CommunityScreen({ navigation }) {
     const [searchTag, setSearchTag] = useState('');
     const [searchResults, setSearchResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
+    const [showDatePicker, setShowDatePicker] = useState(false);
 
     useFocusEffect(
         useCallback(() => {
@@ -541,15 +543,42 @@ export default function CommunityScreen({ navigation }) {
                                     value={searchTag}
                                     onChangeText={setSearchTag}
                                 />
-                                <TextInput
-                                    style={[styles.searchInput, { flex: 1 }]}
-                                    placeholder="YYYY-MM-DD"
-                                    placeholderTextColor="#666"
-                                    value={searchDate}
-                                    onChangeText={setSearchDate}
-                                />
+                                <View style={{ flex: 1, flexDirection: 'row', gap: 6 }}>
+                                    <TouchableOpacity
+                                        style={[styles.searchInput, { flex: 1, justifyContent: 'center' }]}
+                                        onPress={() => setShowDatePicker(true)}
+                                    >
+                                        <Text style={{ color: searchDate ? '#fff' : '#666' }}>
+                                            {searchDate || "Select Date"}
+                                        </Text>
+                                    </TouchableOpacity>
+                                    {searchDate ? (
+                                        <TouchableOpacity
+                                            onPress={() => setSearchDate('')}
+                                            style={{ width: 40, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,68,68,0.15)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,68,68,0.3)' }}
+                                        >
+                                            <Ionicons name="close" size={18} color="#FF4444" />
+                                        </TouchableOpacity>
+                                    ) : null}
+                                </View>
                             </View>
                         </View>
+
+                        {showDatePicker && (
+                            <DateTimePicker
+                                value={searchDate ? new Date(searchDate) : new Date()}
+                                mode="date"
+                                display="default"
+                                onChange={(event, selectedDate) => {
+                                    setShowDatePicker(Platform.OS === 'ios');
+                                    if (event.type === 'set' && selectedDate) {
+                                        setSearchDate(selectedDate.toISOString().split('T')[0]);
+                                    } else if (event.type === 'dismissed') {
+                                        setShowDatePicker(false);
+                                    }
+                                }}
+                            />
+                        )}
 
                         {isSearching && <ActivityIndicator size="small" color="#5B63D3" style={{ marginVertical: 10 }} />}
 

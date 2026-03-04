@@ -22,7 +22,6 @@ export default function SplashScreen({ onFinish }) {
     const opacityAnim = useRef(new Animated.Value(0)).current;
     const scaleAnim = useRef(new Animated.Value(0.3)).current;
     const translateYAnim = useRef(new Animated.Value(50)).current;
-    const textLetterSpacing = useRef(new Animated.Value(0)).current;
 
     // Background Pulse
     const bgScale = useRef(new Animated.Value(1)).current;
@@ -57,20 +56,12 @@ export default function SplashScreen({ onFinish }) {
             ]),
 
             // 2. Elegant Pulse / Zoom Effect (Royal feel)
-            Animated.parallel([
-                Animated.timing(textLetterSpacing, {
-                    toValue: 5,
-                    duration: 1500,
-                    useNativeDriver: false, // Text style props often don't support native driver
-                    easing: Easing.inOut(Easing.ease),
-                }),
-                Animated.loop(
-                    Animated.sequence([
-                        Animated.timing(bgScale, { toValue: 1.1, duration: 2000, useNativeDriver: true }),
-                        Animated.timing(bgScale, { toValue: 1, duration: 2000, useNativeDriver: true }),
-                    ])
-                ).start(),
-            ]),
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(bgScale, { toValue: 1.1, duration: 2000, useNativeDriver: true }),
+                    Animated.timing(bgScale, { toValue: 1, duration: 2000, useNativeDriver: true }),
+                ])
+            ).start(),
         ]).start();
 
         // 3. Exit Sequence after distinct delay
@@ -187,7 +178,7 @@ export default function SplashScreen({ onFinish }) {
 
                 {/* Text Title */}
                 <Animated.View style={{ opacity: opacityAnim, marginTop: 40, alignItems: 'center' }}>
-                    <Animated.Text style={[styles.title, { letterSpacing: textLetterSpacing }]}>
+                    <Animated.Text style={[styles.title, { letterSpacing: 5 }]}>
                         GEO CONQUEST
                     </Animated.Text>
                     <View style={styles.separator} />
